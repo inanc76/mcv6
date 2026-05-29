@@ -333,18 +333,129 @@ Tüm `data-*` attribute'ları + ARIA + state hazır. Tasarımcı `[data-block="a
 
 ---
 
-## Pluginler (Yapılandırma Beklemede)
+## Pluginler
 
-> Bu bölüm ilerleyen iterasyonda detaylandırılacak. Şu an plugin'ler `package.json`'da kurulu ama `payload.config.ts`'in `plugins: []` dizisi BOŞ. `/proje-kur` skill'inin spec.payloadHints'e göre nasıl wire edeceği ayrı bir konuşma konusu.
+Plugin'ler **paket olarak `package.json`'da kurulu** ama `payload.config.ts`'in `plugins: []` dizisinde wire edilmemiş. `/proje-kur` skill spec.payloadHints'e göre projeye özgü wire eder.
 
-Hazır plugin'ler:
-- `@payloadcms/plugin-nested-docs@3.85.0` — Pages hierarchy + breadcrumbs
-- `@payloadcms/plugin-form-builder@3.85.0` — Forms collection + FormBlock entegrasyonu
-- `@payloadcms/plugin-seo@3.85.0` — Meta tag fields
-- `@payloadcms/plugin-redirects@3.85.0` — URL redirect collection
-- `@payloadcms/plugin-search@3.85.0` — Search index
-- `@payloadcms/storage-s3` — S3 cloud storage (production)
-- `@payloadcms/email-nodemailer` — SMTP email adapter (production)
+### 🟢 Kurulu Plugin'ler (12)
+
+#### Resmî — Payload ekibi (8)
+| Paket | Görevi |
+|---|---|
+| `@payloadcms/plugin-seo` | Meta tag yönetimi (title, description, OG, canonical) |
+| `@payloadcms/plugin-form-builder` | Drag-drop form yapıcı + Forms collection + FormBlock |
+| `@payloadcms/plugin-search` | Site içi arama indexi |
+| `@payloadcms/plugin-nested-docs` | Pages hierarchy + breadcrumbs |
+| `@payloadcms/plugin-redirects` | URL redirect yönetimi |
+| `@payloadcms/storage-s3` | S3 / R2 / MinIO media storage (production) |
+| `@payloadcms/email-resend` | Transactional email (Resend) |
+| `@payloadcms/plugin-sentry` (+ `@sentry/nextjs`) | Hata izleme — **Bugsink DSN ile çalışır** (Sentry-uyumlu API) |
+
+#### Community (4)
+| Paket | Görevi |
+|---|---|
+| `@oversightstudio/encrypted-fields` | AES field-level encryption — **KVKK uyumu** için. PII/API key field'ları DB'de encrypted, transparent decrypt |
+| `payload-auth-plugin` | Better Auth — 2FA (TOTP), magic link, OAuth (Google/Microsoft/GitHub), passkey, session management |
+| `payload-rbac` | Role-based access control — Users.roles + hasRole / hasAnyRole helper'lar |
+| `@payload-bites/broken-link-checker` | RichText + link field'larını tarar; 404/timeout/SSL hatalarını admin'de işaretler |
+
+### 🟡 İleride Eklenebilecek Plugin'ler
+
+Müşteri profiline göre tek `pnpm add` ile gelir. Tam katalog için [payload-cms-eklentiler.md](../payload-cms-eklentiler.md) (40 plugin rehberi).
+
+#### Resmî ek (Payload ekibi)
+- `@payloadcms/storage-vercel-blob` — Vercel Blob storage
+- `@payloadcms/email-nodemailer` — SMTP alternatifi (Resend yerine)
+- `@payloadcms/plugin-stripe` — Stripe webhook + customer sync
+- `@payloadcms/plugin-multi-tenant` — Tek instance'ta çoklu tenant (franchise)
+- `@payloadcms/plugin-import-export` — CSV/JSON ile bulk import/export
+
+#### AI & İçerik Üretimi
+- `@ai-stack/payloadcms` (ashbuilds/payload-ai) — Field başına AI assist (yazım, görsel, alt-text)
+- `@payload-enchants/translator` (r1tsuu) — OpenAI/Google çeviri (TR→EN tek tıkla)
+- `payload-translator` (azhao6060) — DeepL ile otomatik çeviri
+
+#### Editör & Sayfa Yapıcı
+- `payload-visual-editor` (pemedia) — Storyblok tarzı canlı görsel düzenleyici
+- `@forrestjs/payload-gutenberg` — WordPress Gutenberg tarzı block editor
+- `payload-lexical-typography` (AdrianMaj) — Lexical'a text color, font size, letter spacing
+- `@nhayhoc/payloadcms-lexical-ext` (rubn-g) — Lexical'a background, YouTube/Vimeo embed
+- `payload-better-fields-plugin` — Color picker, icon picker, range slider
+
+#### İçerik Kalitesi & Workflow
+- `@payload-bites/image-search` — Upload picker'da Unsplash + Pexels arama
+- `@payload-bites/content-freeze` — Launch sırasında içerik kilidi
+- `@payload-bites/soft-delete` — `deletedAt` field + Trash view (Payload 3.45+ native Trash de var)
+- `payload-versions-cleanup` — Draft/version retention (cron)
+- `payload-plugin-scheduler` (wkentdag) — WordPress tarzı scheduled publish
+- `@harrytwigg/plugin-editorial-workflow` — Çok aşamalı onay (Draft → Review → Approved → Published)
+
+#### Media & Optimizasyon
+- `@oversightstudio/mux-video` — Mux video upload + playback
+- `@oversightstudio/blur-data-urls` — Otomatik blur placeholder (Core Web Vitals)
+- `payload-blurhash-plugin` — BlurHash/LQIP (next/image placeholder için)
+
+#### Analitik & A/B Testing
+- `payload-posthog-analytics` (sampennington) — PostHog admin widget
+- `payload-ab` (brijr) — A/B testing for collections
+
+#### Güvenlik & Erişim
+- `payload-rate-limit` — Login + public API rate limit (brute force koruma)
+- `payload-audit-log` — Kim, ne zaman, ne değiştirdi (ISO/KVKK compliance)
+- `payload-cloudflare-turnstile` — Bot koruması (form-builder ile)
+- `payload-oauth2` / `@payloadcms/plugin-oauth` — Tekil OAuth2 (Google SSO)
+
+#### Form & Entegrasyon
+- `payload-webhooks-plugin` — Slack/Discord/Zapier webhook
+- `payload-public-api` — Public REST API + API key
+
+#### Developer & DevOps
+- `payload-oapi` (janbuchar) — OpenAPI 3.0 spec + Swagger UI (SDK üretmek için)
+- `@payloadcms/plugin-sentry` — Sentry/Bugsink (kurulu)
+
+#### Niş
+- `payload-appointments-plugin` (ahmetskilinc) — Services + Appointments + calendar
+- `payload-comments` — Blog yorum sistemi
+- `payload-meilisearch` — Tipo-toleranslı arama (Türkçe karakter sorunsuz)
+
+---
+
+## Environment Variables
+
+Tüm env'ler **`.env.example`'da örnek değerleriyle**. Yeni proje açtığında:
+```bash
+cp .env.example .env
+# .env'i düzenle
+```
+
+### Zorunlu (Core)
+
+| Var | Açıklama |
+|---|---|
+| `DATABASE_URL` | Postgres bağlantı string'i |
+| `PAYLOAD_SECRET` | JWT/session encryption (`openssl rand -hex 32`) |
+| `NEXT_PUBLIC_SERVER_URL` | Site URL (CORS + meta tags) |
+
+### Önerilen (Core)
+
+| Var | Açıklama |
+|---|---|
+| `CRON_SECRET` | Vercel/cron job auth |
+| `PREVIEW_SECRET` | Draft preview validation |
+| `PUBLIC_LOCALES` | Aktif locale'ler (örn. `tr,en`) — middleware |
+| `PUBLIC_DEFAULT_LOCALE` | Accept-Language eşleşmediğinde fallback |
+
+### Plugin Env'leri (ilgili plugin wire edildiğinde aktif)
+
+| Plugin | Env Değişkenleri |
+|---|---|
+| `storage-s3` | `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_BUCKET`, `S3_ENDPOINT` (R2/MinIO için) |
+| `email-resend` | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` |
+| `plugin-sentry` (Bugsink) | `BUGSINK_DSN` (Bugsink veya Sentry SaaS DSN) |
+| `encrypted-fields` | `ENCRYPTION_KEY` (`openssl rand -hex 32`) ⚠️ kayıp = veri okunamaz |
+| `payload-auth-plugin` | `AUTH_SECRET` (+ opsiyonel: `GOOGLE_CLIENT_ID/SECRET`, `MICROSOFT_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`) |
+| `payload-rbac` | — yok |
+| `broken-link-checker` | — yok (cron config'te) |
 
 ---
 
