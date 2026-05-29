@@ -126,7 +126,7 @@ export const seedFromSitemapEndpoint: Endpoint = {
       parentId: number | string | null,
     ): Promise<void> {
       // [grup] (type='group') nodes do NOT create a Page — they are category/menu
-      // headers only (see MediaClick convention: sitemap [grup] => Category only,
+      // headers only (convention: sitemap [grup] => Category only,
       // never a Page). Children still walk through with parentId from the *nearest
       // page ancestor*, not the group, so URL hierarchy may flatten — that's
       // intentional under the new convention. [external] is skipped entirely.

@@ -1,6 +1,6 @@
-# mcv6 — MediaClick CMS Template
+# mcv6 — Payload CMS Template
 
-MediaClick Ajansı için Payload CMS 3 + Next.js 16 tabanlı "default-zengin" proje şablonu. Her kurumsal site için tekrar tekrar gereken altyapıyı (auth, collections, navigation globals, blocks, locale routing, admin) hazır sunar. Yeni proje açılır açılmaz **iskelet işliyor** — her projeye özgü kısım (sitemap'ten gelen sayfalar, müşterinin tasarım stilleri, custom collection'lar) `/proje-kur` skill'i ile spec YAML'dan üretilir.
+Payload CMS 3 + Next.js 16 tabanlı "default-zengin" proje şablonu. Her kurumsal site için tekrar tekrar gereken altyapıyı (auth, collections, navigation globals, blocks, locale routing, admin) hazır sunar. Yeni proje açılır açılmaz **iskelet işliyor** — her projeye özgü kısım (sitemap'ten gelen sayfalar, müşterinin tasarım stilleri, custom collection'lar) `/proje-kur` skill'i ile spec YAML'dan üretilir.
 
 ---
 
@@ -43,7 +43,7 @@ Detay: https://payloadcms.com/docs
 
 ## mcv6 Nedir? Niye Var?
 
-MediaClick her ay 1-2 yeni kurumsal site açıyor. Her seferinde:
+Her ay 1-2 yeni kurumsal site açılıyor. Her seferinde:
 - Aynı klasör yapısı kurulur
 - Aynı Pages/Posts/Media/Categories collection'ları tanımlanır
 - Aynı Header/MainMenu/Footer global'leri yaratılır
@@ -296,7 +296,7 @@ mcv6'daki 20 block'tan:
 
 ### Semi-Styled Felsefesi
 
-MediaClick'te her müşteri kendi tasarımcısıyla özel tasarım yapıyor. Mcv6'da generic Tailwind stilleri eklemek demek:
+Her müşteri kendi tasarımcısıyla özel tasarım yapıyor. Mcv6'da generic Tailwind stilleri eklemek demek:
 - Her projede önce **eski stilleri silmek** sonra yeni stilleri eklemek (ekstra iş)
 - `!important` override karmaşası
 - Müşteri tasarımına uymayan generic pattern'ler

@@ -1,7 +1,7 @@
 {
   "name": "mcv6",
   "version": "1.0.0",
-  "description": "MediaClick CMS v6 — default-rich Payload + Next.js template (used via /proje-kur)",
+  "description": "mcv6 — default-rich Payload + Next.js template (used via /proje-kur)",
   "license": "MIT",
   "type": "module",
   "scripts": {
