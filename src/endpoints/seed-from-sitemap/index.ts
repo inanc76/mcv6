@@ -5,13 +5,15 @@ import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 
 /**
- * Seed Payload Pages from sitemap.yml (multi-locale aware).
+ * Seed Payload Pages from sitemap.yml (multi-locale aware, parent-aware).
  *
  * Reads ../sitemap.yml relative to this file's project root, walks the pages
- * tree, and creates one Payload Page per non-group, non-external node. Each
- * page is seeded in the configured default locale first; if `slugs` / `titles`
- * locale maps are present on the node, additional locales are filled too.
- * Idempotent: matches by default-locale slug, updates if exists.
+ * tree, and creates one Payload Page per non-external node (including 'group'
+ * nodes — they become section index pages so parent/URL hierarchy works via
+ * nestedDocsPlugin). Each page is seeded in the configured default locale
+ * first; if `slugs` / `titles` locale maps are present, additional locales
+ * are filled too. Idempotent: matches by default-locale slug, updates if
+ * exists — re-running backfills parent for previously seeded pages.
  *
  *   curl -X POST http://127.0.0.1:3000/api/seed-from-sitemap
  *
@@ -171,16 +173,16 @@ export const seedFromSitemapEndpoint: Endpoint = {
       node: SitemapNode,
       parentId: number | string | null,
     ): Promise<void> {
+      // [external] tamamen atlanır; URL'i navigation.yml'de yaşar.
       if (node.type === 'external') {
         stats.skipped_external++
-      } else if (node.type === 'group') {
-        if (node.children?.length) {
-          for (const child of node.children) {
-            await seedNode(child, parentId)
-          }
-        }
         return
-      } else {
+      }
+      // [group] node'ları da Page yaratır (parent ilişkisi ZORUNLU çünkü
+      // nestedDocsPlugin URL hiyerarşisini parent zincirinden üretir).
+      // Eski "transparent group" davranışı parent=null bırakıyordu →
+      // /tr/hakkimizda/ege-seramik URL'i resolve olmuyordu.
+      {
         let myId: number | string | null = null
         try {
           const defaultSlug = slugFor(node, defaultLocale)
@@ -368,7 +370,9 @@ export const seedFromSitemapEndpoint: Endpoint = {
         folderForThisNode = folderId
       }
 
-      if (node.type !== 'external' && node.type !== 'group') {
+      // group node'ları artık Page yarattığı için onlar da klasöre atanır.
+      // group page kendi klasörünün içinde "section index" olur.
+      if (node.type !== 'external') {
         const defaultSlug = slugFor(node, defaultLocale)
         await assignPageToFolder(defaultSlug, folderForThisNode)
       }

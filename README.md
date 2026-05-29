@@ -531,7 +531,7 @@ pages:
     slugs: { tr: hakkimizda, en: about }
     titles: { tr: "Hakkımızda", en: "About" }
     path: /hakkimizda
-    type: group                # group → Page yaratmaz, folder + children için header
+    type: group                # group → "section index" Page + folder + parent
     children:
       - slug: ege-seramik
         title: "Ege Seramik"
@@ -542,11 +542,11 @@ pages:
 ```
 
 **Davranış:**
-- `type: group` → Page yaratılmaz; admin'de folder olur, children parent ID'sini bir üst seviyeden alır.
-- `type: external` → tamamen atlanır (URL navigation'a koy).
+- `type: group` → **Page YARATILIR** ("section index" page) + admin'de folder + children parent zincirinde bu page'i alır. Bu sayede `/hakkimizda/ege-seramik` gibi URL'ler nestedDocsPlugin ile resolve olur. Group page'in layout'u placeholder bırakılır; admin'den section landing içeriği eklenebilir.
+- `type: external` → tamamen atlanır (URL navigation.yml'de yaşar).
 - `slugs` / `titles` yoksa → sadece default locale seed edilir, ek locale boş kalır.
 - `slugs` var ama `titles` yok → ek locale title `Title-Case-From-Slug` ile otomatik (admin'den düzeltilebilir).
-- Sayfalar idempotent: default-locale slug üzerinden eşleşir; varsa update, yoksa create.
+- Sayfalar idempotent: default-locale slug üzerinden eşleşir; varsa update, yoksa create. Re-run **parent ilişkisini backfill eder** — eski seed'lerin parent=null sorunu tekrar çalıştırarak çözülür.
 
 ### navigation.yml schema
 
@@ -586,8 +586,13 @@ footer: [...]                  # → footer-navigation (2 seviye)
 ### forms.yml schema
 
 ```yaml
+# Global defaults (opsiyonel) — her form için aksi belirtilmedikçe uygulanır
+defaultEmailTo: "developer@example.com"     # form gönderildiğinde bildirim alacak adres
+defaultEmailFrom: "noreply@example.com"     # gönderen adres (yoksa NEXT_PUBLIC_SERVER_URL host'undan türetilir)
+
 forms:
   - title: "İş Başvuru Formu"
+    emailTo: "hr@example.com"                                # opsiyonel: bu forma özel adres
     submitLabel: "Gönder"                                    # opsiyonel
     confirmationMessage: "Başvurunuz alındı, teşekkürler."   # plain text
     fields: []                                               # admin'den doldur
@@ -597,7 +602,13 @@ forms:
     #   - { type: email, name: email, label: "E-posta", required: true }
 ```
 
-İdempotent: title üzerinden eşleşir.
+**Davranış:**
+- `defaultEmailTo` set ise her form için bir email notification config'i yazılır (Form Builder'ın `emails` array'i)
+- `emailTo` form-spesifik override; örn. İK formu `ik@...`, Şikayet formu `musteri@...`
+- `emailFrom` yoksa `noreply@<NEXT_PUBLIC_SERVER_URL'in domain'i>` kullanılır
+- İdempotent: title üzerinden eşleşir; re-run config'i (submitLabel, confirmationMessage, emails) günceller ama `fields`'i KORUR (admin'de yapılan field edit'leri silmez)
+
+> 💡 `/proje-kur` skill'i `defaultEmailTo`'yu spec'teki `project.authorEmail`'den otomatik doldurur — developer formları kendisine yönlendirir, müşteri sonradan admin'den değiştirir.
 
 ---
 
