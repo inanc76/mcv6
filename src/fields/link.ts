@@ -4,13 +4,16 @@ import deepMerge from '@/utilities/deepMerge'
 
 export type LinkAppearances = 'default' | 'outline'
 
-export const appearanceOptions: Record<LinkAppearances, { label: string; value: string }> = {
+export const appearanceOptions: Record<
+  LinkAppearances,
+  { label: { tr: string; en: string }; value: string }
+> = {
   default: {
-    label: 'Default',
+    label: { tr: 'Varsayılan', en: 'Default' },
     value: 'default',
   },
   outline: {
-    label: 'Outline',
+    label: { tr: 'Çerçeveli', en: 'Outline' },
     value: 'outline',
   },
 }
@@ -25,6 +28,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
   const linkResult: GroupField = {
     name: 'link',
     type: 'group',
+    label: { tr: 'Bağlantı', en: 'Link' },
     admin: {
       hideGutter: true,
     },
@@ -35,6 +39,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
           {
             name: 'type',
             type: 'radio',
+            label: { tr: 'Tip', en: 'Type' },
             admin: {
               layout: 'horizontal',
               width: '50%',
@@ -42,15 +47,15 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
             defaultValue: 'reference',
             options: [
               {
-                label: 'Internal link',
+                label: { tr: 'Sayfa Bağlantısı', en: 'Internal link' },
                 value: 'reference',
               },
               {
-                label: 'Custom URL',
+                label: { tr: 'Özel URL', en: 'Custom URL' },
                 value: 'custom',
               },
               {
-                label: 'Group (sayfasız başlık)',
+                label: { tr: 'Grup (sayfasız başlık)', en: 'Group (pageless heading)' },
                 value: 'group',
               },
             ],
@@ -64,7 +69,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
               },
               width: '50%',
             },
-            label: 'Open in new tab',
+            label: { tr: 'Yeni sekmede aç', en: 'Open in new tab' },
           },
         ],
       },
@@ -78,7 +83,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
       admin: {
         condition: (_, siblingData) => siblingData?.type === 'reference',
       },
-      label: 'Document to link to',
+      label: { tr: 'Bağlanılacak Sayfa', en: 'Document to link to' },
       relationTo: ['pages', 'posts'],
       // required koşullu olduğu için false; group tipinde Page seçilmek zorunda değil
       required: false,
@@ -89,7 +94,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
       admin: {
         condition: (_, siblingData) => siblingData?.type === 'custom',
       },
-      label: 'Custom URL',
+      label: { tr: 'Özel URL', en: 'Custom URL' },
       required: false,
     },
   ]
@@ -113,7 +118,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
           admin: {
             width: '50%',
           },
-          label: 'Label',
+          label: { tr: 'Etiket', en: 'Label' },
           required: true,
         },
       ],
@@ -132,8 +137,9 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
     linkResult.fields.push({
       name: 'appearance',
       type: 'select',
+      label: { tr: 'Görünüm', en: 'Appearance' },
       admin: {
-        description: 'Choose how the link should be rendered.',
+        description: { tr: 'Bağlantının nasıl görüneceğini seçin.', en: 'Choose how the link should be rendered.' },
       },
       defaultValue: 'default',
       options: appearanceOptionsToUse,

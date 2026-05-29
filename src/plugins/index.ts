@@ -70,10 +70,23 @@ export const plugins: Plugin[] = [
       },
       admin: { group: { tr: 'Formlar', en: 'Forms' } },
       fields: ({ defaultFields }) => {
+        const FORM_FIELD_LABELS: Record<string, { tr: string; en: string }> = {
+          title: { tr: 'Başlık', en: 'Title' },
+          fields: { tr: 'Alanlar', en: 'Fields' },
+          submitButtonLabel: { tr: 'Gönder Butonu Yazısı', en: 'Submit Button Label' },
+          confirmationType: { tr: 'Onay Tipi', en: 'Confirmation Type' },
+          confirmationMessage: { tr: 'Onay Mesajı', en: 'Confirmation Message' },
+          redirect: { tr: 'Yönlendirme', en: 'Redirect' },
+          emails: { tr: 'E-postalar', en: 'Emails' },
+        }
         return defaultFields.map((field) => {
+          let next: any = field
+          if ('name' in field && field.name && FORM_FIELD_LABELS[field.name]) {
+            next = { ...next, label: FORM_FIELD_LABELS[field.name] }
+          }
           if ('name' in field && field.name === 'confirmationMessage') {
-            return {
-              ...field,
+            next = {
+              ...next,
               editor: lexicalEditor({
                 features: ({ rootFeatures }) => {
                   return [
@@ -85,7 +98,7 @@ export const plugins: Plugin[] = [
               }),
             }
           }
-          return field
+          return next
         })
       },
     },

@@ -24,6 +24,7 @@ export const Categories: CollectionConfig = {
     {
       name: 'title',
       type: 'text',
+      label: { tr: 'Başlık', en: 'Title' },
       required: true,
       localized: true,
     },

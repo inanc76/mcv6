@@ -81,6 +81,7 @@ export const Pages: CollectionConfig<'pages'> = {
     {
       name: 'title',
       type: 'text',
+      label: { tr: 'Başlık', en: 'Title' },
       required: true,
       localized: true,
     },
@@ -89,13 +90,14 @@ export const Pages: CollectionConfig<'pages'> = {
       tabs: [
         {
           fields: [{ ...hero, localized: true }],
-          label: 'Hero',
+          label: { tr: 'Hero', en: 'Hero' },
         },
         {
           fields: [
             {
               name: 'layout',
               type: 'blocks',
+              label: { tr: 'Düzen', en: 'Layout' },
               blocks: [
                 CallToAction, Content, MediaBlock, Archive, FormBlock,
                 FAQ, Features, Testimonials,
@@ -110,11 +112,11 @@ export const Pages: CollectionConfig<'pages'> = {
               },
             },
           ],
-          label: 'Content',
+          label: { tr: 'İçerik', en: 'Content' },
         },
         {
           name: 'meta',
-          label: 'SEO',
+          label: { tr: 'SEO', en: 'SEO' },
           fields: [
             OverviewField({
               titlePath: 'meta.title',
@@ -144,6 +146,7 @@ export const Pages: CollectionConfig<'pages'> = {
     {
       name: 'publishedAt',
       type: 'date',
+      label: { tr: 'Yayın Tarihi', en: 'Published At' },
       admin: {
         position: 'sidebar',
       },

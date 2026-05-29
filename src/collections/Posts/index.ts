@@ -72,6 +72,7 @@ export const Posts: CollectionConfig<'posts'> = {
     {
       name: 'title',
       type: 'text',
+      label: { tr: 'Başlık', en: 'Title' },
       required: true,
       localized: true,
     },
@@ -83,6 +84,7 @@ export const Posts: CollectionConfig<'posts'> = {
             {
               name: 'heroImage',
               type: 'upload',
+              label: { tr: 'Kapak Görseli', en: 'Hero Image' },
               relationTo: 'media',
             },
             {
@@ -105,13 +107,14 @@ export const Posts: CollectionConfig<'posts'> = {
               required: true,
             },
           ],
-          label: 'Content',
+          label: { tr: 'İçerik', en: 'Content' },
         },
         {
           fields: [
             {
               name: 'relatedPosts',
               type: 'relationship',
+              label: { tr: 'İlgili Yazılar', en: 'Related Posts' },
               admin: {
                 position: 'sidebar',
               },
@@ -128,6 +131,7 @@ export const Posts: CollectionConfig<'posts'> = {
             {
               name: 'categories',
               type: 'relationship',
+              label: { tr: 'Kategoriler', en: 'Categories' },
               admin: {
                 position: 'sidebar',
               },
@@ -135,11 +139,11 @@ export const Posts: CollectionConfig<'posts'> = {
               relationTo: 'categories',
             },
           ],
-          label: 'Meta',
+          label: { tr: 'Meta', en: 'Meta' },
         },
         {
           name: 'meta',
-          label: 'SEO',
+          label: { tr: 'SEO', en: 'SEO' },
           fields: [
             OverviewField({
               titlePath: 'meta.title',
@@ -169,6 +173,7 @@ export const Posts: CollectionConfig<'posts'> = {
     {
       name: 'publishedAt',
       type: 'date',
+      label: { tr: 'Yayın Tarihi', en: 'Published At' },
       admin: {
         date: {
           pickerAppearance: 'dayAndTime',
@@ -189,6 +194,7 @@ export const Posts: CollectionConfig<'posts'> = {
     {
       name: 'authors',
       type: 'relationship',
+      label: { tr: 'Yazarlar', en: 'Authors' },
       admin: {
         position: 'sidebar',
       },
