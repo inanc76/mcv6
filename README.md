@@ -494,6 +494,154 @@ pnpm dev
 
 ---
 
+## Seed Workflow (sitemap + navigation + forms)
+
+mcv6 üç dosyadan beslenen idempotent seed sistemi sağlar:
+
+| Dosya | Hedef | Yöntem |
+|---|---|---|
+| `sitemap.yml` | Pages + folders (multi-locale) | `POST /api/seed-from-sitemap` |
+| `navigation.yml` | 3 navigation global | `pnpm exec tsx scripts/seed-navigation.ts` |
+| `forms.yml` | Forms collection (stub veya tam) | `pnpm exec tsx scripts/seed-forms.ts` |
+
+Hepsi idempotent — aynı dosya birden çok kez çalıştırılabilir, yenilenir.
+
+### sitemap.yml schema (multi-locale)
+
+```yaml
+site:
+  name: "Site Adı"
+  defaultLocale: "tr"          # PUBLIC_DEFAULT_LOCALE ile eşleşmeli
+  locales: ["tr", "en"]        # opsiyonel; yoksa [defaultLocale]
+
+pages:
+  - slug: anasayfa             # default locale slug (zorunlu)
+    title: "Ana Sayfa"         # default locale title (zorunlu)
+    slugs:                     # opsiyonel: locale-spesifik slug override
+      tr: anasayfa
+      en: home
+    titles:                    # opsiyonel: locale-spesifik title override
+      tr: "Ana Sayfa"
+      en: "Home"
+    path: /anasayfa
+    type: landing              # landing | content | group | form | archive | external
+
+  - slug: hakkimizda
+    title: "Hakkımızda"
+    slugs: { tr: hakkimizda, en: about }
+    titles: { tr: "Hakkımızda", en: "About" }
+    path: /hakkimizda
+    type: group                # group → Page yaratmaz, folder + children için header
+    children:
+      - slug: ege-seramik
+        title: "Ege Seramik"
+        slugs: { tr: ege-seramik, en: ege-seramik }
+        titles: { tr: "Ege Seramik", en: "Ege Seramik" }
+        path: /hakkimizda/ege-seramik
+        type: content
+```
+
+**Davranış:**
+- `type: group` → Page yaratılmaz; admin'de folder olur, children parent ID'sini bir üst seviyeden alır.
+- `type: external` → tamamen atlanır (URL navigation'a koy).
+- `slugs` / `titles` yoksa → sadece default locale seed edilir, ek locale boş kalır.
+- `slugs` var ama `titles` yok → ek locale title `Title-Case-From-Slug` ile otomatik (admin'den düzeltilebilir).
+- Sayfalar idempotent: default-locale slug üzerinden eşleşir; varsa update, yoksa create.
+
+### navigation.yml schema
+
+```yaml
+defaultLocale: tr
+locales: [tr, en]              # opsiyonel
+
+header:                        # → global slug: header-navigation (2 seviye)
+  - label: "Online Satış"
+    labels: { tr: "Online Satış", en: "Online Sales" }   # opsiyonel
+    url: "https://online.example.com"
+    type: external
+
+  - label: "İndirme Merkezi"
+    ref: "indirme-merkezi"     # = Page slug (default locale)
+    type: internal
+
+  - label: "Sanal Deneyim"
+    type: group                # sayfasız başlık (link.type='group')
+    children:
+      - label: "Sanal Odalar"
+        ref: "sanal-odalar"
+        type: internal
+
+main: [...]                    # → main-navigation (3 seviye)
+footer: [...]                  # → footer-navigation (2 seviye)
+```
+
+**Type → Payload link mapping:**
+
+| navigation.yml type | Payload link.type | Diğer alanlar |
+|---|---|---|
+| `external` | `custom` | `url`, `newTab: true` |
+| `internal` | `reference` | `reference: { relationTo: 'pages', value: <id> }` |
+| `group` | `group` | sadece `label` (sayfasız başlık) |
+
+### forms.yml schema
+
+```yaml
+forms:
+  - title: "İş Başvuru Formu"
+    submitLabel: "Gönder"                                    # opsiyonel
+    confirmationMessage: "Başvurunuz alındı, teşekkürler."   # plain text
+    fields: []                                               # admin'den doldur
+    # veya inline:
+    # fields:
+    #   - { type: text, name: adsoyad, label: "Ad Soyad", required: true }
+    #   - { type: email, name: email, label: "E-posta", required: true }
+```
+
+İdempotent: title üzerinden eşleşir.
+
+---
+
+## Custom Admin Route
+
+Default admin route `/admin`. Bunu özelleştirmek (örn. `/admin/<proje>`) **iki dosyada birden** değişiklik gerektirir — `routes.admin` config'i yetmez:
+
+**1. `src/payload.config.ts`'e route ekle:**
+
+```ts
+export default buildConfig({
+  routes: {
+    admin: '/admin/<proje>',
+  },
+  // ...
+})
+```
+
+**2. Next.js app klasörünü taşı** (kritik — atlanırsa **sonsuz redirect loop**):
+
+```bash
+cd src/app/\(payload\)/admin
+mkdir -p <proje>
+git mv "[[...segments]]" <proje>/
+```
+
+**3. Taşınan `page.tsx` ve `not-found.tsx`'de import path'i düzelt:**
+
+```ts
+// ESKİ:  import { importMap } from '../importMap'
+import { importMap } from '../../importMap'
+```
+
+**Test:**
+```bash
+curl -I http://127.0.0.1:3000/admin/<proje>          # 200
+curl -I http://127.0.0.1:3000/admin                  # 404 (eski yol gitmiş olmalı)
+curl -I http://127.0.0.1:3000/admin/<proje>/create-first-user  # 200
+```
+
+`/admin` ve `/admin/<proje>` ikisi de 200 dönüyorsa → klasör taşıması başarısız; geri dön.
+
+---
+
 ## Yapı
 
 ```

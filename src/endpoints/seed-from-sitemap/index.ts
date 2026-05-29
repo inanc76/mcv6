@@ -5,15 +5,38 @@ import { fileURLToPath } from 'node:url'
 import yaml from 'js-yaml'
 
 /**
- * Seed Payload Pages from sitemap.yml (skeleton — title + slug + draft, no content).
+ * Seed Payload Pages from sitemap.yml (multi-locale aware).
  *
- * Reads ../sitemap.yml relative to this file's project root, walks the pages tree,
- * and creates one Payload Page per non-group, non-external node. Idempotent: matches
- * by slug, updates if exists, creates if not.
+ * Reads ../sitemap.yml relative to this file's project root, walks the pages
+ * tree, and creates one Payload Page per non-group, non-external node. Each
+ * page is seeded in the configured default locale first; if `slugs` / `titles`
+ * locale maps are present on the node, additional locales are filled too.
+ * Idempotent: matches by default-locale slug, updates if exists.
  *
  *   curl -X POST http://127.0.0.1:3000/api/seed-from-sitemap
  *
- * Created by payload-sitemap-parse skill.
+ * ## sitemap.yml schema (backward compatible)
+ *
+ * ```yaml
+ * site:
+ *   name: "Site"
+ *   defaultLocale: "tr"
+ *   locales: ["tr", "en"]   # optional; default = [defaultLocale]
+ *
+ * pages:
+ *   - slug: ege-seramik     # default-locale slug (required)
+ *     title: "Ege Seramik"  # default-locale title (required)
+ *     slugs:                # optional: per-locale slug overrides
+ *       tr: ege-seramik
+ *       en: ege-ceramic
+ *     titles:               # optional: per-locale title overrides
+ *       tr: "Ege Seramik"
+ *       en: "Ege Ceramic"
+ *     path: /hakkimizda/ege-seramik
+ *     type: content
+ * ```
+ *
+ * Old single-locale sitemaps (without `locales`/`slugs`/`titles`) keep working.
  */
 
 type NodeType = 'landing' | 'content' | 'group' | 'form' | 'archive' | 'external'
@@ -26,19 +49,27 @@ type SitemapNode = {
   type: NodeType
   external?: string
   collection?: string
+  slugs?: Record<string, string>
+  titles?: Record<string, string>
   children?: SitemapNode[]
 }
 
 type SitemapDoc = {
-  site: { name: string; defaultLocale: string }
+  site: { name: string; defaultLocale: string; locales?: string[] }
   pages: SitemapNode[]
 }
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
-// src/endpoints/seed-from-sitemap/ → up 3 to project root
 const projectRoot = path.resolve(dirname, '../../..')
 const SITEMAP_PATH = path.join(projectRoot, 'sitemap.yml')
+
+function titleCaseFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 
 export const seedFromSitemapEndpoint: Endpoint = {
   path: '/seed-from-sitemap',
@@ -49,7 +80,7 @@ export const seedFromSitemapEndpoint: Endpoint = {
     let raw: string
     try {
       raw = await fs.readFile(SITEMAP_PATH, 'utf8')
-    } catch (err: unknown) {
+    } catch {
       return Response.json(
         { ok: false, error: `sitemap.yml not found at ${SITEMAP_PATH}` },
         { status: 400 },
@@ -68,14 +99,21 @@ export const seedFromSitemapEndpoint: Endpoint = {
       return Response.json({ ok: false, error: 'sitemap.yml has no pages' }, { status: 400 })
     }
 
+    const defaultLocale = doc.site?.defaultLocale || 'tr'
+    const allLocales = doc.site?.locales?.length ? doc.site.locales : [defaultLocale]
+    const extraLocales = allLocales.filter((l) => l !== defaultLocale)
+
     const stats = {
       pages: { created: 0, updated: 0 },
       folders: { created: 0, updated: 0 },
+      locales: { applied: 0, skipped: 0 },
       skipped_external: 0,
       errors: [] as Array<{ phase: string; slug: string; error: string }>,
     }
 
-    payload.logger.info('▶ seed-from-sitemap started')
+    payload.logger.info(
+      `▶ seed-from-sitemap started (defaultLocale=${defaultLocale}, extraLocales=[${extraLocales.join(',')}])`,
+    )
 
     function placeholderBlock(slug: string) {
       return {
@@ -118,22 +156,24 @@ export const seedFromSitemapEndpoint: Endpoint = {
       }
     }
 
-    // Recursively seeds a node and its children. Top-level YAML entries are
-    // passed parentId=null (the YAML flattens root and its peers as siblings —
-    // see payload-sitemap-parse skill); their children get this node's id.
+    function slugFor(node: SitemapNode, locale: string): string {
+      return node.slugs?.[locale] ?? node.slug
+    }
+    function titleFor(node: SitemapNode, locale: string): string {
+      if (node.titles?.[locale]) return node.titles[locale]
+      if (locale !== defaultLocale && node.slugs?.[locale]) {
+        return titleCaseFromSlug(node.slugs[locale])
+      }
+      return node.title
+    }
+
     async function seedNode(
       node: SitemapNode,
       parentId: number | string | null,
     ): Promise<void> {
-      // [grup] (type='group') nodes do NOT create a Page — they are category/menu
-      // headers only (convention: sitemap [grup] => Category only,
-      // never a Page). Children still walk through with parentId from the *nearest
-      // page ancestor*, not the group, so URL hierarchy may flatten — that's
-      // intentional under the new convention. [external] is skipped entirely.
       if (node.type === 'external') {
         stats.skipped_external++
       } else if (node.type === 'group') {
-        // skip Page creation; children seed under the *same* parentId (group is transparent)
         if (node.children?.length) {
           for (const child of node.children) {
             await seedNode(child, parentId)
@@ -143,19 +183,21 @@ export const seedFromSitemapEndpoint: Endpoint = {
       } else {
         let myId: number | string | null = null
         try {
+          const defaultSlug = slugFor(node, defaultLocale)
           const existing = await payload.find({
             collection: 'pages',
-            where: { slug: { equals: node.slug } },
+            where: { slug: { equals: defaultSlug } },
             limit: 1,
             depth: 0,
+            locale: defaultLocale,
           })
 
           const data = {
-            title: node.title,
-            slug: node.slug,
+            title: titleFor(node, defaultLocale),
+            slug: defaultSlug,
             _status: 'published' as const,
             hero: { type: 'lowImpact' as const },
-            layout: [placeholderBlock(node.slug)],
+            layout: [placeholderBlock(defaultSlug)],
             ...(parentId !== null ? { parent: parentId } : {}),
           }
 
@@ -164,18 +206,56 @@ export const seedFromSitemapEndpoint: Endpoint = {
               collection: 'pages',
               id: existing.docs[0].id,
               data,
+              locale: defaultLocale,
+              context: { disableRevalidate: true },
             })
             myId = updated.id
             stats.pages.updated++
-            payload.logger.info(`   ↳ updated page ${node.slug} (${node.title})`)
+            payload.logger.info(`   ↳ updated page ${defaultSlug} [${defaultLocale}]`)
           } else {
             const created = await payload.create({
               collection: 'pages',
               data,
+              locale: defaultLocale,
+              context: { disableRevalidate: true },
             })
             myId = created.id
             stats.pages.created++
-            payload.logger.info(`   ↳ created page ${node.slug} (${node.title})`)
+            payload.logger.info(`   ↳ created page ${defaultSlug} [${defaultLocale}]`)
+          }
+
+          if (myId !== null) {
+            for (const locale of extraLocales) {
+              const hasLocaleData =
+                node.slugs?.[locale] !== undefined || node.titles?.[locale] !== undefined
+              if (!hasLocaleData) {
+                stats.locales.skipped++
+                continue
+              }
+              try {
+                await payload.update({
+                  collection: 'pages',
+                  id: myId,
+                  data: {
+                    title: titleFor(node, locale),
+                    slug: slugFor(node, locale),
+                  },
+                  locale,
+                  context: { disableRevalidate: true },
+                })
+                stats.locales.applied++
+                payload.logger.info(
+                  `      ↳ [${locale}] slug=${slugFor(node, locale)} title="${titleFor(node, locale)}"`,
+                )
+              } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err)
+                stats.errors.push({
+                  phase: `pages-locale-${locale}`,
+                  slug: defaultSlug,
+                  error: message,
+                })
+              }
+            }
           }
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err)
@@ -191,18 +271,11 @@ export const seedFromSitemapEndpoint: Endpoint = {
       }
     }
 
-    // PHASE 1: Pages with parent relationship
-    payload.logger.info('▶ phase 1: seeding pages')
+    payload.logger.info('▶ phase 1: seeding pages (default + extra locales)')
     for (const page of doc.pages) {
       await seedNode(page, null)
     }
 
-    // PHASE 2: Folders for each [grup] + assign pages to nearest group folder.
-    // Pages.folders=true makes Payload auto-provision the `payload-folders`
-    // collection and a `folder` relation on Pages. Groups become folders;
-    // every non-external page is attached to its nearest [grup] ancestor's
-    // folder (top-level standalone pages get their own folder too — keeps
-    // the admin "Browse by folder" view tidy).
     payload.logger.info('▶ phase 2: seeding folders')
 
     async function findOrCreateFolder(
@@ -248,7 +321,6 @@ export const seedFromSitemapEndpoint: Endpoint = {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err)
         stats.errors.push({ phase: 'folders', slug: name, error: message })
-        payload.logger.error({ err }, `seed-from-sitemap: folder ${name} failed`)
         return null
       }
     }
@@ -264,27 +336,22 @@ export const seedFromSitemapEndpoint: Endpoint = {
           where: { slug: { equals: slug } },
           limit: 1,
           depth: 0,
+          locale: defaultLocale,
         })
         if (page.docs[0]) {
           await payload.update({
             collection: 'pages',
             id: page.docs[0].id,
             data: { folder: folderId } as any,
+            context: { disableRevalidate: true },
           })
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err)
         stats.errors.push({ phase: 'folder-assign', slug, error: message })
-        payload.logger.error({ err }, `seed-from-sitemap: assign ${slug} to folder failed`)
       }
     }
 
-    // currentFolderId tracks the nearest containing folder while walking.
-    // Folders are created in two cases:
-    //   1. Any [grup] node (at any depth) — group becomes a folder with children inside
-    //   2. Top-level standalone pages (except landing) — first-level entries always
-    //      get their own folder, even if they have no children. This keeps the admin
-    //      "Browse by folder" view consistent at the top level.
     async function walkForFolders(
       node: SitemapNode,
       currentFolderId: number | string | null,
@@ -302,8 +369,8 @@ export const seedFromSitemapEndpoint: Endpoint = {
       }
 
       if (node.type !== 'external' && node.type !== 'group') {
-        // Only real Pages (not [grup] entries — they were skipped in Phase 1) get attached.
-        await assignPageToFolder(node.slug, folderForThisNode)
+        const defaultSlug = slugFor(node, defaultLocale)
+        await assignPageToFolder(defaultSlug, folderForThisNode)
       }
 
       for (const child of node.children || []) {
@@ -315,14 +382,8 @@ export const seedFromSitemapEndpoint: Endpoint = {
       await walkForFolders(page, null, true)
     }
 
-    // NOTE: Categories collection is reserved for Posts (blog) taxonomy and is
-    // NOT auto-populated from sitemap [grup] nodes. Page hierarchy is already
-    // covered by parent/breadcrumbs (nestedDocsPlugin) and admin organization
-    // by `folders: true`. Producing Categories from sitemap created an unused
-    // third copy of the same information — removed deliberately.
-
     payload.logger.info(
-      `✔ seed-from-sitemap done — pages=${stats.pages.created}+${stats.pages.updated} folders=${stats.folders.created}+${stats.folders.updated} errors=${stats.errors.length}`,
+      `✔ seed-from-sitemap done — pages=${stats.pages.created}+${stats.pages.updated} folders=${stats.folders.created}+${stats.folders.updated} locales(extra)=${stats.locales.applied}/${stats.locales.applied + stats.locales.skipped} errors=${stats.errors.length}`,
     )
 
     return Response.json({ ok: stats.errors.length === 0, stats })
