@@ -5,11 +5,12 @@ import { revalidateFooter } from './hooks/revalidateFooter'
 
 export const FooterNavigation: GlobalConfig = {
   slug: 'footer-navigation',
+  label: { tr: 'Footer Menü', en: 'Footer Navigation' },
   access: {
     read: () => true,
   },
   admin: {
-    group: 'Globals',
+    group: { tr: 'Globaller', en: 'Globals' },
   },
   fields: [
     {

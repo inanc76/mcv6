@@ -5,11 +5,12 @@ import { revalidateMainMenu } from './hooks/revalidateMainMenu'
 
 export const MainNavigation: GlobalConfig = {
   slug: 'main-navigation',
+  label: { tr: 'Ana Menü', en: 'Main Navigation' },
   access: {
     read: () => true,
   },
   admin: {
-    group: 'Globals',
+    group: { tr: 'Globaller', en: 'Globals' },
   },
   fields: [
     {

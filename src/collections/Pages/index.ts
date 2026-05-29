@@ -40,6 +40,10 @@ import {
 
 export const Pages: CollectionConfig<'pages'> = {
   slug: 'pages',
+  labels: {
+    singular: { tr: 'Sayfa', en: 'Page' },
+    plural: { tr: 'Sayfalar', en: 'Pages' },
+  },
   folders: true,
   access: {
     create: authenticated,
@@ -55,7 +59,7 @@ export const Pages: CollectionConfig<'pages'> = {
     slug: true,
   },
   admin: {
-    group: 'Content',
+    group: { tr: 'İçerik', en: 'Content' },
     defaultColumns: ['title', 'slug', 'updatedAt'],
     livePreview: {
       url: ({ data, req }) =>

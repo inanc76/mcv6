@@ -5,6 +5,7 @@ import { revalidateSiteSettings } from './hooks/revalidateSiteSettings'
 
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
+  label: { tr: 'Site Ayarları', en: 'Site Settings' },
   access: {
     read: () => true,
     update: authenticated,
