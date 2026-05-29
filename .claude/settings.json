@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm:*)",
+      "Bash(curl -s* http://127.0.0.1:*)",
+      "Bash(curl -X POST http://127.0.0.1:*)",
+      "Bash(psql postgres://localhost*)",
+      "Bash(createdb *)",
+      "Bash(dropdb *)",
+      "Bash(openssl rand:*)",
+      "Bash(pkill -f *)",
+      "Edit(.claude/skills/**)",
+      "Write(.claude/skills/**)"
+    ]
+  }
+}
