@@ -178,24 +178,31 @@ function buildEmails(form: FormSpec) {
   return out
 }
 
+// Map user-facing `type` (YAML schema) → Form Builder's `blockType` (DB shape).
+// Existing fields already in DB keep their blockType — we just ensure honeypot
+// field has the correct shape.
+function normalizeField(f: FormField & { blockType?: string }): FormField {
+  // If field already came from DB (has blockType, no type), leave it alone.
+  if (f.blockType && !f.type) return f
+  const { type, ...rest } = f as any
+  return { ...rest, blockType: type ?? f.blockType ?? 'text' } as any
+}
+
 // Honeypot field — bot-only invisible input. Frontend MUST render it
 // hidden (display:none veya position:absolute;left:-9999px). Server-side
 // hook (src/plugins/index.ts → formSubmissionOverrides.hooks.beforeOperation)
 // dolu olarak gelirse submission'ı reject eder.
 function honeypotField(): FormField {
-  return {
+  return normalizeField({
     type: 'text',
     name: HONEYPOT_FIELD,
     label: '(do not fill — spam trap)',
     required: false,
-    admin: {
-      description: 'Honeypot — frontend bunu gizler. Bot doldurursa submission reddedilir.',
-    } as any,
-  }
+  })
 }
 
 function mergeFields(userFields: FormField[] | undefined): FormField[] {
-  const base = userFields ?? []
+  const base = (userFields ?? []).map(normalizeField)
   if (!HONEYPOT_ENABLED) return base
   const hasHoneypot = base.some((f) => f.name === HONEYPOT_FIELD)
   return hasHoneypot ? base : [...base, honeypotField()]
