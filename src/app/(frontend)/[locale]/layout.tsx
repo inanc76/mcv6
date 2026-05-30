@@ -13,9 +13,10 @@ import { Providers } from '@/providers'
 import { InitTheme } from '@/providers/Theme/InitTheme'
 import { mergeOpenGraph } from '@/utilities/mergeOpenGraph'
 import { draftMode } from 'next/headers'
+import { getSiteMode } from '@/utilities/getSiteMode'
+import { getCanonicalSiteUrl } from '@/utilities/getCanonicalSiteUrl'
 
 import '../globals.css'
-import { getServerSideURL } from '@/utilities/getURL'
 
 type LocaleLayoutProps = {
   children: React.ReactNode
@@ -61,11 +62,18 @@ export default async function RootLayout({ children, params }: LocaleLayoutProps
   )
 }
 
-export const metadata: Metadata = {
-  metadataBase: new URL(getServerSideURL()),
-  openGraph: mergeOpenGraph(),
-  twitter: {
-    card: 'summary_large_image',
-    creator: '@payloadcms',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const [mode, canonical] = await Promise.all([getSiteMode(), getCanonicalSiteUrl()])
+  return {
+    metadataBase: new URL(canonical),
+    openGraph: mergeOpenGraph(),
+    twitter: {
+      card: 'summary_large_image',
+      creator: '@payloadcms',
+    },
+    robots:
+      mode === 'development'
+        ? { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } }
+        : undefined,
+  }
 }

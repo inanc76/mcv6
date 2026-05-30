@@ -28,6 +28,18 @@ export const SiteSettings: GlobalConfig = {
           required: true,
         },
         {
+          name: 'siteUrl',
+          label: { en: 'Canonical Site URL', tr: 'Canlı Site Adresi' },
+          type: 'text',
+          admin: {
+            placeholder: 'https://example.com',
+            description: {
+              en: 'Production URL — used for canonical tags, OG image base, and robots.txt/sitemap.xml Sitemap references. Leave empty to auto-detect from the current request.',
+              tr: 'Canlı site adresi (canonical etiketler, OG görsel base URL, robots.txt/sitemap.xml referansları için). Boş bırakırsanız istek URL\'inden otomatik algılanır.',
+            },
+          },
+        },
+        {
           name: 'tagline',
           label: { en: 'Tagline', tr: 'Slogan' },
           type: 'text',
@@ -108,42 +120,7 @@ export const SiteSettings: GlobalConfig = {
         },
       ],
     },
-    // ─── ROBOTS ──────────────────────────────────────────────────────────
-    {
-      name: 'robots',
-      label: { en: 'Robots', tr: 'Robots' },
-      type: 'group',
-      admin: {
-        description: {
-          en: 'Content served at /robots.txt. Changes go live immediately on save.',
-          tr: '/robots.txt adresinde yayınlanır. Kaydettiğinizde anında aktif olur.',
-        },
-      },
-      fields: [
-        {
-          name: 'robotsTxt',
-          label: { en: 'robots.txt content', tr: 'robots.txt içeriği' },
-          type: 'textarea',
-          admin: {
-            rows: 14,
-            description: {
-              en: 'Leave empty to use a sensible default generated from your domain. Edit freely to customize.',
-              tr: 'Boş bırakırsanız domain’inizden otomatik varsayılan üretilir. İstediğiniz gibi düzenleyebilirsiniz.',
-            },
-          },
-          defaultValue: [
-            'User-agent: *',
-            'Disallow: /admin/',
-            'Disallow: /api/',
-            'Disallow: /*.doc$',
-            'Disallow: /*.docx$',
-            'Allow: /',
-            '',
-            'Sitemap: https://example.com/sitemap.xml',
-          ].join('\n'),
-        },
-      ],
-    },
+    // siteMode + robotsTxt artık ayrı SeoSettings global'inde (src/SeoSettings/config.ts).
   ],
   hooks: {
     afterChange: [revalidateSiteSettings],

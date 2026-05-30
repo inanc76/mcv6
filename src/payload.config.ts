@@ -13,6 +13,7 @@ import { FooterNavigation } from './FooterNavigation/config'
 import { HeaderNavigation } from './HeaderNavigation/config'
 import { MainNavigation } from './MainNavigation/config'
 import { SiteSettings } from './SiteSettings/config'
+import { SeoSettings } from './SeoSettings/config'
 import { FormSettings } from './FormSettings/config'
 import { plugins } from './plugins'
 import { seedMainEndpoint } from './endpoints/seed-main'
@@ -29,9 +30,9 @@ export default buildConfig({
       // The `BeforeLogin` component renders a message that you see while logging into your admin panel.
       // Feel free to delete this at any time. Simply remove the line below.
       beforeLogin: ['@/components/BeforeLogin'],
-      // The `BeforeDashboard` component renders the 'welcome' block that you see after logging into your admin panel.
-      // Feel free to delete this at any time. Simply remove the line below.
-      beforeDashboard: ['@/components/BeforeDashboard'],
+      // The `SiteModeWidget` shows a Live/Development toggle and status message at the top of the dashboard.
+      // Flipping to Development makes /robots.txt return `Disallow: /` and adds noindex meta to all pages.
+      beforeDashboard: ['@/components/SiteModeWidget'],
     },
     importMap: {
       baseDir: path.resolve(dirname),
@@ -84,7 +85,7 @@ export default buildConfig({
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),
   endpoints: [seedMainEndpoint, seedFromSitemapEndpoint],
-  globals: [SiteSettings, HeaderNavigation, MainNavigation, FooterNavigation, FormSettings],
+  globals: [SiteSettings, SeoSettings, HeaderNavigation, MainNavigation, FooterNavigation, FormSettings],
   plugins,
   secret: process.env.PAYLOAD_SECRET,
   sharp,

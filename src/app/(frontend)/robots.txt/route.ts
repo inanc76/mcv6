@@ -1,35 +1,37 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { unstable_cache } from 'next/cache'
-import { getServerSideURL } from '@/utilities/getURL'
+import { getCanonicalSiteUrl } from '@/utilities/getCanonicalSiteUrl'
 
-const buildDefault = (siteUrl: string) =>
-  [
-    'User-agent: *',
-    'Disallow: /admin/',
-    'Disallow: /api/',
-    'Disallow: /*.doc$',
-    'Disallow: /*.docx$',
-    'Allow: /',
-    '',
-    `Sitemap: ${siteUrl}/sitemap.xml`,
-  ].join('\n')
+const DEV_ROBOTS = 'User-agent: *\nDisallow: /\n'
+
+const stripSitemapLines = (txt: string) =>
+  txt
+    .split('\n')
+    .filter((line) => !/^\s*sitemap\s*:/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+const buildLiveDefault = () =>
+  ['User-agent: *', 'Disallow: /admin/', 'Disallow: /api/', 'Disallow: /*.doc$', 'Disallow: /*.docx$', 'Allow: /'].join(
+    '\n',
+  )
 
 const getRobotsTxt = unstable_cache(
   async () => {
     const payload = await getPayload({ config })
-    const siteUrl = getServerSideURL().replace(/\/$/, '')
+    const seo = await payload.findGlobal({ slug: 'seo-settings', depth: 0 })
 
-    const settings = await payload.findGlobal({
-      slug: 'site-settings',
-      depth: 0,
-    })
+    if (seo?.siteMode === 'development') return DEV_ROBOTS
 
-    const custom = settings?.robots?.robotsTxt?.trim()
-    return custom && custom.length > 0 ? custom : buildDefault(siteUrl)
+    const custom = seo?.robotsTxt?.trim()
+    const base = custom && custom.length > 0 ? stripSitemapLines(custom) : buildLiveDefault()
+    const siteUrl = await getCanonicalSiteUrl()
+    return `${base}\n\nSitemap: ${siteUrl}/sitemap.xml\n`
   },
   ['site-settings-robots-txt'],
-  { tags: ['global_site-settings'] },
+  { tags: ['global_seo-settings', 'global_site-settings'] },
 )
 
 export async function GET() {
