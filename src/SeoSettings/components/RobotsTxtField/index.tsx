@@ -18,30 +18,30 @@ const RobotsTxtField: React.FC<Props> = ({ path }) => {
   const { i18n } = useTranslation()
   const lang: 'tr' | 'en' = i18n?.language === 'en' ? 'en' : 'tr'
 
-  // siteUrl başka global'de (site-settings.branding.siteUrl) — fetch ile çekiyoruz.
-  const [fetchedSiteUrl, setFetchedSiteUrl] = React.useState<string | null>(null)
+  // SSR ve client ilk render aynı placeholder'ı versin (hydration mismatch'i önler);
+  // gerçek URL useEffect içinde set edilir.
+  const [effectiveSiteUrl, setEffectiveSiteUrl] = React.useState<string>('https://example.com')
   React.useEffect(() => {
     let cancelled = false
+    const fallback = window.location.origin
     fetch('/api/globals/site-settings?depth=0', { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return
         const url = d?.branding?.siteUrl?.trim()
         if (url && /^https?:\/\//i.test(url)) {
-          setFetchedSiteUrl(url.replace(/\/$/, ''))
+          setEffectiveSiteUrl(url.replace(/\/$/, ''))
+        } else {
+          setEffectiveSiteUrl(fallback)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setEffectiveSiteUrl(fallback)
+      })
     return () => {
       cancelled = true
     }
   }, [])
-
-  const effectiveSiteUrl = React.useMemo(() => {
-    if (fetchedSiteUrl) return fetchedSiteUrl
-    if (typeof window !== 'undefined') return window.location.origin
-    return 'https://example.com'
-  }, [fetchedSiteUrl])
 
   const previewContent = React.useMemo(() => {
     if (isDev) return buildDevContent()
