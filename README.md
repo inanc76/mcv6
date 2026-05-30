@@ -583,69 +583,131 @@ footer: [...]                  # → footer-navigation (2 seviye)
 | `internal` | `reference` | `reference: { relationTo: 'pages', value: <id> }` |
 | `group` | `group` | sadece `label` (sayfasız başlık) |
 
-### forms.yml schema
+### forms.yml schema (multi-locale)
 
 ```yaml
-# Global defaults (opsiyonel)
+defaultLocale: tr
+locales: [tr, en]                            # opsiyonel; default = [defaultLocale]
+
+# Global defaults
 defaultEmailTo: "developer@example.com"      # admin notification adresi
 defaultEmailFrom: "noreply@example.com"      # gönderen (yoksa SERVER_URL host'undan)
-submitterEmailField: "email"                 # auto-reply için form field adı (default: 'email')
+submitterEmailField: "email"                 # auto-reply için form field adı
 
-# Auto-reply config (opsiyonel) — form'u dolduran kişiye onay maili
+# Auto-reply — per-locale subject + message
 autoReply:
-  enabled: true                              # default true; false ile kapatılır
-  subject: "Formunuz alındı"                 # opsiyonel; default = "Formunuz alındı"
-  message: |
-    Merhaba,
-    "{{*}}" bilgilerinizle başvurunuz alındı.
-    En kısa sürede dönüş yapacağız.
+  enabled: true                              # seed-time: false ise email config yazılmaz
+  subjects:
+    tr: "Formunuz alındı"
+    en: "Your form was received"
+  messages:
+    tr: |
+      Merhaba,
+      Mesajınız tarafımıza ulaştı. En kısa sürede dönüş yapacağız.
+    en: |
+      Hello,
+      Your message has reached us. We will get back to you shortly.
 
-# Honeypot field — her forma otomatik enjekte edilen invisible input
+# Admin notification — per-locale subject + message
+adminNotification:
+  subjects:
+    tr: "Yeni form gönderimi"                # form title append edilir
+    en: "New form submission"
+  messages:
+    tr: "Bir form gönderimi geldi:\n\n{{*}}"
+    en: "A form submission was received:\n\n{{*}}"
+
+# Honeypot — her forma _honeypot field'ı enjekte edilir
 honeypot:
-  enabled: true                              # default true
   fieldName: "_honeypot"                     # frontend bunu display:none ile gizler
 
 forms:
-  - title: "İş Başvuru Formu"
-    emailTo: "hr@example.com"                                # opsiyonel override
-    submitLabel: "Gönder"                                    # opsiyonel
-    confirmationMessage: "Başvurunuz alındı, teşekkürler."
-    fields:                                                  # admin'den doldur veya inline:
+  - title: "İş Başvuru Formu"                # default-locale title (zorunlu)
+    titles:
+      tr: "İş Başvuru Formu"
+      en: "Job Application Form"
+    emailTo: "hr@example.com"                # opsiyonel: bu forma özel adres
+    submitLabels:
+      tr: "Gönder"
+      en: "Submit"
+    confirmationMessages:
+      tr: "Başvurunuz alındı, teşekkürler."
+      en: "Your application was received, thank you."
+    fields:
       - { type: text,  name: adsoyad, label: "Ad Soyad", required: true }
       - { type: email, name: email,   label: "E-posta",   required: true }
 ```
 
-**Email davranışı:**
-- `defaultEmailTo` set ise her form için **admin notification** email config'i yazılır. Subject: `Yeni form gönderimi: <form title>`. Body: `{{*}}` template — submitter'ın doldurduğu TÜM field'ları admin görür.
-- `autoReply.enabled` default `true`: ikinci email config'i submitter'a gider, `emailTo: {{email}}` (veya `submitterEmailField` ne ise). Form'da o field yoksa Form Builder silently skip eder.
-- `emailTo` form-spesifik admin adresi override eder (ik@, sikayet@, vs.).
-- İdempotent: title üzerinden eşleşir; re-run config + emails + honeypot field'ı güncellenir ama user-added fields KORUNUR.
+**Davranış:**
+- Her form `locales` listesindeki HER dil için seed edilir. Forms collection'da `title`, `submitButtonLabel`, `confirmationMessage`, `emails` field'ları `localized: true` (formOverrides ile).
+- `defaultEmailTo` set ise her locale için **admin notification** email config'i yazılır. Subject: `<adminNotification.subjects[locale]>: <form title>`. Body: `{{*}}` template ile tüm gönderim datası.
+- `autoReply.enabled` (seed-time) = `true` ise her locale için **submitter auto-reply** ikinci email config'i yazılır, `emailTo: {{email}}` (veya `submitterEmailField`).
+- `emailTo` form-spesifik admin adresi override eder.
+- Form gönderildiğinde Payload `req.locale`'e göre doğru locale'in `emails` array'ini kullanır — TR sayfadan gelen submission TR email atar, EN sayfadan gelen EN email atar.
+- İdempotent: default-locale title üzerinden eşleşir; config + emails + honeypot güncellenir, user-added fields KORUNUR.
 
-**Spam koruması (otomatik):**
-- **Honeypot**: seed-forms her forma `_honeypot` text field'ı enjekte eder. Frontend'te `display:none` ile gizlenir; bot doldurursa `formSubmissionOverrides.hooks.beforeOperation` reject eder.
-- **Cloudflare Turnstile**: `CLOUDFLARE_TURNSTILE_SECRET_KEY` env'inde set ise server-side token doğrulanır. Frontend `NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY` ile widget render eder; token submission'a `_turnstileToken` field adıyla eklenir. Secret yoksa dev modunda Turnstile bypass (sadece honeypot çalışır).
-- Geçerli submission'da internal field'lar (`_honeypot`, `_turnstileToken`) DB'ye yazılmadan strip edilir — admin Form Yanıtları'nda görünmez.
+### Form Settings global (admin runtime toggle)
 
-**Email body template syntax (Payload Form Builder):**
-- `{{*}}` — tüm doldurulan field'lar, `Ad Soyad: John\nE-posta: john@...` formatında
-- `{{*:table}}` — HTML tablo formatında
-- `{{fieldName}}` — spesifik field değeri
-- Admin notification body default `{{*}}` template kullanır; auto-reply body de `{{*}}` ile gönderim kopyası içerir.
+`Formlar → Form Ayarları` admin global'i 3 davranışı çalıştırma zamanı kontrol eder:
+
+| Toggle | Etki |
+|---|---|
+| `honeypotEnabled` | Her submission'da `_honeypot` field kontrol edilir. Honeypot field zaten DB'de (seed-forms enjekte etti), bu toggle sadece **kontrol** edilip edilmeyeceğini değiştirir. |
+| `autoReplyEnabled` | Bilgilendirme amaçlı — seed-forms zaten auto-reply email config'lerini yazdı. Runtime'da kapatılırsa Form Builder bu config'leri kullanmamayı bilmez; tam kapatma için config'leri sil veya re-seed `autoReply.enabled: false` ile. |
+| `captchaEnabled` + `captchaProvider` | Aktifse her submission'da Cloudflare Turnstile **veya** Google reCAPTCHA v3 token doğrulanır. |
+
+### Captcha provider env vars
+
+İki seçim arasından birini set et — ikisini birden gerekmez (FormSettings'ten seçilen sağlayıcı çalışır).
+
+**Cloudflare Turnstile** (https://dash.cloudflare.com → Turnstile):
+```
+CLOUDFLARE_TURNSTILE_SECRET_KEY=
+NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY=
+```
+
+**Google reCAPTCHA v3** (https://www.google.com/recaptcha/admin → v3):
+```
+RECAPTCHA_SECRET_KEY=
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=
+```
+
+Secret yoksa o sağlayıcı bypass (dev modu safety). reCAPTCHA v3 score threshold default 0.5 (`src/utilities/formSpamGuard.ts` → `RECAPTCHA_MIN_SCORE`).
+
+**Spam koruması mimari:**
+- **Honeypot**: seed-forms her forma `_honeypot` text field'ı enjekte. Frontend `display:none` ile gizler. Bot doldurursa `formSubmissionOverrides.hooks.beforeOperation` (src/utilities/formSpamGuard.ts) reject eder.
+- **Captcha** (Turnstile veya reCAPTCHA v3): aynı hook FormSettings'i okuyup seçili sağlayıcı endpoint'ine token doğrulatır. Frontend submission'a `_turnstileToken` veya `_recaptchaToken` field'ı ekler.
+- Geçerli submission'dan tüm internal field'lar (`_honeypot`, `_turnstileToken`, `_recaptchaToken`) DB'ye yazılmadan strip edilir.
 
 **Frontend integration:**
-- Honeypot input'unu render et — CSS ile gizle:
-  ```html
-  <input type="text" name="_honeypot" tabindex="-1" autocomplete="off"
-         style="position:absolute;left:-9999px;opacity:0" aria-hidden="true" />
-  ```
-- Turnstile widget'ı render et (Cloudflare snippet veya `@marsidev/react-turnstile`):
-  ```tsx
-  <Turnstile siteKey={process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY!}
-             onSuccess={(token) => setTurnstileToken(token)} />
-  ```
-  Submit ederken `submissionData`'ya `{ field: '_turnstileToken', value: turnstileToken }` ekle.
 
-> 💡 `/proje-kur` skill'i `defaultEmailTo`'yu spec'teki `project.authorEmail`'den otomatik doldurur — developer formları kendisine yönlendirir, müşteri sonradan admin'den değiştirir.
+Honeypot:
+```html
+<input type="text" name="_honeypot" tabindex="-1" autocomplete="off"
+       style="position:absolute;left:-9999px;opacity:0" aria-hidden="true" />
+```
+
+Cloudflare Turnstile (örn. `@marsidev/react-turnstile`):
+```tsx
+<Turnstile siteKey={process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY!}
+           onSuccess={(token) => setTurnstileToken(token)} />
+// submit'te: submissionData.push({ field: '_turnstileToken', value: turnstileToken })
+```
+
+Google reCAPTCHA v3 (örn. `react-google-recaptcha-v3`):
+```tsx
+<GoogleReCaptchaProvider reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}>
+  <FormComponent />  // executeRecaptcha('formSubmit') ile token üret
+</GoogleReCaptchaProvider>
+// submit'te: submissionData.push({ field: '_recaptchaToken', value: token })
+```
+
+**Email body template syntax (Payload Form Builder):**
+- `{{*}}` — tüm doldurulan field'lar key:value formatında
+- `{{*:table}}` — HTML tablo
+- `{{fieldName}}` — spesifik field değeri
+
+> 💡 `/proje-kur` skill'i `defaultEmailTo`'yu spec'teki `project.authorEmail`'den otomatik doldurur. Bilingual title/submit/confirmation/email metinleri spec'te EN translation yoksa placeholder olarak yazılır; müşteri admin'den marketing-quality copy yazar.
 
 ---
 

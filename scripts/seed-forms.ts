@@ -1,37 +1,60 @@
 /**
- * Seed Payload Forms collection from forms.yml.
+ * Seed Payload Forms collection from forms.yml (multi-locale aware).
  *
  *   pnpm exec tsx scripts/seed-forms.ts
  *
  * Idempotent: re-running updates existing forms' emails + submitButtonLabel +
- * confirmationMessage + honeypot field (matched by title). User-added fields
- * are preserved on re-run (only the honeypot field is auto-injected/synced).
+ * confirmationMessage + honeypot field (matched by default-locale title).
+ * User-added fields are preserved on re-run (only the honeypot field is
+ * auto-injected/synced).
  *
- * ## forms.yml schema
+ * ## forms.yml schema (multi-locale)
  *
  * ```yaml
- * # Global defaults (optional)
+ * defaultLocale: tr
+ * locales: [tr, en]                            # opsiyonel; default = [defaultLocale]
+ *
+ * # Global defaults
  * defaultEmailTo: "developer@example.com"      # admin notification target
  * defaultEmailFrom: "noreply@example.com"      # sender (else derived from SERVER_URL)
  * submitterEmailField: "email"                 # form field name to auto-reply to
  *
- * # Auto-reply config (optional) — sent to submitter after submission
+ * # Auto-reply config — per-locale subject + message
  * autoReply:
- *   enabled: true                              # default true if not set
- *   subject: "Formunuz alındı"
- *   message: "Teşekkürler! En kısa sürede size dönüş yapacağız."
- *
- * # Honeypot field auto-injected into every form (set false to disable)
- * honeypot:
  *   enabled: true                              # default true
- *   fieldName: "_honeypot"                     # internal name; hidden in frontend
+ *   subjects:
+ *     tr: "Formunuz alındı"
+ *     en: "Your form was received"
+ *   messages:
+ *     tr: "Merhaba,\nMesajınız tarafımıza ulaştı. En kısa sürede dönüş yapacağız."
+ *     en: "Hello,\nYour message has reached us. We will get back to you shortly."
+ *
+ * # Admin notification — per-locale subject + message
+ * adminNotification:
+ *   subjects:
+ *     tr: "Yeni form gönderimi"                # form title append edilir
+ *     en: "New form submission"
+ *   messages:
+ *     tr: "Bir form gönderimi geldi:\n\n{{*}}"
+ *     en: "A form submission was received:\n\n{{*}}"
+ *
+ * # Honeypot (always inject the field; FormSettings global controls enforcement)
+ * honeypot:
+ *   fieldName: "_honeypot"
  *
  * forms:
- *   - title: "İş Başvuru Formu"
- *     emailTo: "hr@example.com"                # optional override
- *     submitLabel: "Gönder"
- *     confirmationMessage: "Form alındı."
- *     fields:                                  # admin'den doldur veya inline:
+ *   - title: "İş Başvuru Formu"                # default-locale title (zorunlu)
+ *     titles:                                  # per-locale titles
+ *       tr: "İş Başvuru Formu"
+ *       en: "Job Application Form"
+ *     emailTo: "hr@example.com"                # opsiyonel override
+ *     submitLabels:                            # per-locale submit button
+ *       tr: "Gönder"
+ *       en: "Submit"
+ *     confirmationMessages:                    # per-locale plain text
+ *       tr: "Başvurunuz alındı."
+ *       en: "Your application was received."
+ *     fields:
  *       - { type: text,  name: adsoyad, label: "Ad Soyad", required: true }
  *       - { type: email, name: email,   label: "E-posta",   required: true }
  * ```
@@ -39,10 +62,13 @@
  * Email body templating (Payload Form Builder):
  * - `{{*}}` — submitter'ın doldurduğu TÜM field'lar, key: value formatında
  * - `{{fieldName}}` — spesifik field değeri
- * - `{{*:table}}` — HTML tablo formatında tüm field'lar
  *
- * Auto-reply emailTo'da `{{email}}` (veya `submitterEmailField` ne ise) kullanılır
- * — form'da o isimde bir field yoksa email gönderilmez (Form Builder silently skip).
+ * Note: `autoReply.enabled` config sadece seed sırasında etkisini gösterir
+ * (false ise auto-reply email config'i yazılmaz). Runtime davranışı için
+ * FormSettings global'inin `autoReplyEnabled` toggle'ı kullanılır
+ * (admin'den anlık değiştirilebilir; ama email config zaten DB'de olmazsa
+ * runtime toggle anlamsız — false bırakırsan kullanıcı sonradan enable
+ * etmek istediğinde re-seed'lemen gerekir).
  */
 
 import 'dotenv/config'
@@ -53,31 +79,40 @@ import { getPayload } from 'payload'
 import config from '../src/payload.config'
 
 type FormField = {
-  type: string
+  type?: string
+  blockType?: string
   name: string
-  label?: string
+  label?: string | Record<string, string>
   required?: boolean
   [key: string]: unknown
 }
 type FormSpec = {
   title: string
+  titles?: Record<string, string>
   submitLabel?: string
+  submitLabels?: Record<string, string>
   confirmationMessage?: string
+  confirmationMessages?: Record<string, string>
   emailTo?: string
   emailFrom?: string
   fields?: FormField[]
 }
 type FormsDoc = {
+  defaultLocale?: string
+  locales?: string[]
   defaultEmailTo?: string
   defaultEmailFrom?: string
   submitterEmailField?: string
   autoReply?: {
     enabled?: boolean
-    subject?: string
-    message?: string
+    subjects?: Record<string, string>
+    messages?: Record<string, string>
+  }
+  adminNotification?: {
+    subjects?: Record<string, string>
+    messages?: Record<string, string>
   }
   honeypot?: {
-    enabled?: boolean
     fieldName?: string
   }
   forms: FormSpec[]
@@ -96,10 +131,29 @@ if (!doc?.forms?.length) {
   process.exit(1)
 }
 
+const DEFAULT_LOCALE = doc.defaultLocale ?? 'tr'
+const ALL_LOCALES = doc.locales?.length ? doc.locales : [DEFAULT_LOCALE]
 const SUBMITTER_FIELD = doc.submitterEmailField ?? 'email'
-const AUTO_REPLY_ENABLED = doc.autoReply?.enabled !== false
-const HONEYPOT_ENABLED = doc.honeypot?.enabled !== false
+const AUTO_REPLY_SEED = doc.autoReply?.enabled !== false
 const HONEYPOT_FIELD = doc.honeypot?.fieldName ?? '_honeypot'
+
+// Default bilingual content if forms.yml leaves them blank
+const DEFAULT_ADMIN_SUBJECTS: Record<string, string> = {
+  tr: 'Yeni form gönderimi',
+  en: 'New form submission',
+}
+const DEFAULT_ADMIN_MESSAGES: Record<string, string> = {
+  tr: 'Bir form gönderimi geldi:\n\n{{*}}',
+  en: 'A form submission was received:\n\n{{*}}',
+}
+const DEFAULT_AUTOREPLY_SUBJECTS: Record<string, string> = {
+  tr: 'Formunuz alındı',
+  en: 'Your form was received',
+}
+const DEFAULT_AUTOREPLY_MESSAGES: Record<string, string> = {
+  tr: 'Merhaba,\nFormunuz tarafımıza ulaştı. En kısa sürede dönüş yapacağız.\n\nGönderdiğiniz bilgiler:\n{{*}}\n\nTeşekkürler.',
+  en: 'Hello,\nYour form has reached us. We will get back to you shortly.\n\nInformation you submitted:\n{{*}}\n\nThank you.',
+}
 
 function richText(text: string) {
   return {
@@ -144,54 +198,78 @@ function deriveFromDomain(): string {
   }
 }
 
-function buildEmails(form: FormSpec) {
+function titleFor(form: FormSpec, locale: string): string {
+  return form.titles?.[locale] ?? (locale === DEFAULT_LOCALE ? form.title : form.title)
+}
+function submitLabelFor(form: FormSpec, locale: string): string {
+  return form.submitLabels?.[locale] ?? form.submitLabel ?? (locale === 'en' ? 'Submit' : 'Gönder')
+}
+function confirmationFor(form: FormSpec, locale: string): string {
+  return (
+    form.confirmationMessages?.[locale] ??
+    form.confirmationMessage ??
+    (locale === 'en' ? 'Form received. Thank you.' : 'Form alındı. Teşekkürler.')
+  )
+}
+function adminSubjectFor(form: FormSpec, locale: string): string {
+  const base = doc.adminNotification?.subjects?.[locale] ?? DEFAULT_ADMIN_SUBJECTS[locale] ?? DEFAULT_ADMIN_SUBJECTS.en
+  return `${base}: ${titleFor(form, locale)}`
+}
+function adminMessageFor(_form: FormSpec, locale: string): string {
+  return (
+    doc.adminNotification?.messages?.[locale] ??
+    DEFAULT_ADMIN_MESSAGES[locale] ??
+    DEFAULT_ADMIN_MESSAGES.en
+  )
+}
+function autoReplySubjectFor(_form: FormSpec, locale: string): string {
+  return (
+    doc.autoReply?.subjects?.[locale] ??
+    DEFAULT_AUTOREPLY_SUBJECTS[locale] ??
+    DEFAULT_AUTOREPLY_SUBJECTS.en
+  )
+}
+function autoReplyMessageFor(_form: FormSpec, locale: string): string {
+  return (
+    doc.autoReply?.messages?.[locale] ??
+    DEFAULT_AUTOREPLY_MESSAGES[locale] ??
+    DEFAULT_AUTOREPLY_MESSAGES.en
+  )
+}
+
+function buildEmailsForLocale(form: FormSpec, locale: string) {
   const out: Array<Record<string, unknown>> = []
   const to = form.emailTo ?? doc.defaultEmailTo
   const from = form.emailFrom ?? doc.defaultEmailFrom ?? deriveFromDomain()
 
-  // Admin notification — body contains ALL submitted fields via {{*}}
+  // Admin notification
   if (to) {
     out.push({
       emailTo: to,
       emailFrom: from,
-      subject: `Yeni form gönderimi: ${form.title}`,
-      message: richText(
-        `"${form.title}" formuna yeni bir gönderim geldi:\n\n{{*}}`,
-      ),
+      subject: adminSubjectFor(form, locale),
+      message: richText(adminMessageFor(form, locale)),
     })
   }
-
-  // Auto-reply — sent to submitter (requires form has a field named SUBMITTER_FIELD)
-  if (AUTO_REPLY_ENABLED) {
-    const subject = doc.autoReply?.subject ?? 'Formunuz alındı'
-    const message =
-      doc.autoReply?.message ??
-      `Merhaba,\n\n"${form.title}" formunuz tarafımıza ulaştı. En kısa sürede dönüş yapacağız.\n\nGönderdiğiniz bilgiler:\n{{*}}\n\nTeşekkürler.`
+  // Auto-reply (only if enabled at seed time)
+  if (AUTO_REPLY_SEED) {
     out.push({
       emailTo: `{{${SUBMITTER_FIELD}}}`,
       emailFrom: from,
-      subject,
-      message: richText(message),
+      subject: autoReplySubjectFor(form, locale),
+      message: richText(autoReplyMessageFor(form, locale)),
     })
   }
-
   return out
 }
 
 // Map user-facing `type` (YAML schema) → Form Builder's `blockType` (DB shape).
-// Existing fields already in DB keep their blockType — we just ensure honeypot
-// field has the correct shape.
-function normalizeField(f: FormField & { blockType?: string }): FormField {
-  // If field already came from DB (has blockType, no type), leave it alone.
+function normalizeField(f: FormField): FormField {
   if (f.blockType && !f.type) return f
   const { type, ...rest } = f as any
   return { ...rest, blockType: type ?? f.blockType ?? 'text' } as any
 }
 
-// Honeypot field — bot-only invisible input. Frontend MUST render it
-// hidden (display:none veya position:absolute;left:-9999px). Server-side
-// hook (src/plugins/index.ts → formSubmissionOverrides.hooks.beforeOperation)
-// dolu olarak gelirse submission'ı reject eder.
 function honeypotField(): FormField {
   return normalizeField({
     type: 'text',
@@ -203,7 +281,7 @@ function honeypotField(): FormField {
 
 function mergeFields(userFields: FormField[] | undefined): FormField[] {
   const base = (userFields ?? []).map(normalizeField)
-  if (!HONEYPOT_ENABLED) return base
+  // Always inject honeypot (enforcement controlled by FormSettings global at runtime).
   const hasHoneypot = base.some((f) => f.name === HONEYPOT_FIELD)
   return hasHoneypot ? base : [...base, honeypotField()]
 }
@@ -212,45 +290,73 @@ const payload = await getPayload({ config })
 
 let created = 0
 let updated = 0
+let localeWrites = 0
+
 for (const form of doc.forms) {
   try {
+    const defaultTitle = titleFor(form, DEFAULT_LOCALE)
     const existing = await payload.find({
       collection: 'forms',
-      where: { title: { equals: form.title } },
+      where: { title: { equals: defaultTitle } },
       limit: 1,
       depth: 0,
+      locale: DEFAULT_LOCALE,
     })
-    const baseData = {
-      submitButtonLabel: form.submitLabel ?? 'Gönder',
-      confirmationType: 'message',
-      confirmationMessage: richText(
-        form.confirmationMessage ?? 'Form başarıyla gönderildi. Teşekkürler.',
-      ),
-      emails: buildEmails(form),
-    } as any
 
+    let formId: number | string
     if (existing.docs[0]) {
-      // Re-run: update config + ensure honeypot in fields; preserve user-added fields.
+      // Update existing (preserve user-added fields except honeypot reconciliation)
       const currentFields = (existing.docs[0].fields ?? []) as FormField[]
-      const withHoneypot = mergeFields(currentFields)
       await payload.update({
         collection: 'forms',
         id: existing.docs[0].id,
-        data: { ...baseData, fields: withHoneypot },
+        data: {
+          title: defaultTitle,
+          fields: mergeFields(currentFields),
+          submitButtonLabel: submitLabelFor(form, DEFAULT_LOCALE),
+          confirmationType: 'message',
+          confirmationMessage: richText(confirmationFor(form, DEFAULT_LOCALE)),
+          emails: buildEmailsForLocale(form, DEFAULT_LOCALE),
+        } as any,
+        locale: DEFAULT_LOCALE,
       })
+      formId = existing.docs[0].id
       updated++
-      console.log(
-        `  ↻ ${form.title} güncellendi (id=${existing.docs[0].id}, emails=${baseData.emails.length}, honeypot=${HONEYPOT_ENABLED ? 'yes' : 'no'})`,
-      )
+      console.log(`  ↻ ${defaultTitle} güncellendi [${DEFAULT_LOCALE}] (id=${formId})`)
     } else {
       const c = await payload.create({
         collection: 'forms',
-        data: { title: form.title, fields: mergeFields(form.fields), ...baseData } as any,
+        data: {
+          title: defaultTitle,
+          fields: mergeFields(form.fields),
+          submitButtonLabel: submitLabelFor(form, DEFAULT_LOCALE),
+          confirmationType: 'message',
+          confirmationMessage: richText(confirmationFor(form, DEFAULT_LOCALE)),
+          emails: buildEmailsForLocale(form, DEFAULT_LOCALE),
+        } as any,
+        locale: DEFAULT_LOCALE,
       })
+      formId = c.id
       created++
-      console.log(
-        `  ✓ ${form.title} oluşturuldu (id=${c.id}, fields=${mergeFields(form.fields).length}, emails=${baseData.emails.length})`,
-      )
+      console.log(`  ✓ ${defaultTitle} oluşturuldu [${DEFAULT_LOCALE}] (id=${formId})`)
+    }
+
+    // Write other locales (title, submitButtonLabel, confirmationMessage, emails are localized:true)
+    for (const locale of ALL_LOCALES) {
+      if (locale === DEFAULT_LOCALE) continue
+      await payload.update({
+        collection: 'forms',
+        id: formId,
+        data: {
+          title: titleFor(form, locale),
+          submitButtonLabel: submitLabelFor(form, locale),
+          confirmationMessage: richText(confirmationFor(form, locale)),
+          emails: buildEmailsForLocale(form, locale),
+        } as any,
+        locale,
+      })
+      localeWrites++
+      console.log(`      ↳ [${locale}] title="${titleFor(form, locale)}"`)
     }
   } catch (err: any) {
     console.log(`  ✗ ${form.title} HATA: ${err?.message?.slice(0, 200)}`)
@@ -258,6 +364,9 @@ for (const form of doc.forms) {
 }
 
 console.log(
-  `\n✓ Forms seed tamamlandı — created=${created}, updated=${updated}, autoReply=${AUTO_REPLY_ENABLED}, honeypot=${HONEYPOT_ENABLED}`,
+  `\n✓ Forms seed tamamlandı — created=${created}, updated=${updated}, locale writes=${localeWrites}, autoReply(seeded)=${AUTO_REPLY_SEED}`,
+)
+console.log(
+  `  Reminder: Runtime davranışı için admin → Form Ayarları (FormSettings global) toggle'larını kontrol et`,
 )
 process.exit(0)

@@ -13,6 +13,7 @@ import { FooterNavigation } from './FooterNavigation/config'
 import { HeaderNavigation } from './HeaderNavigation/config'
 import { MainNavigation } from './MainNavigation/config'
 import { SiteSettings } from './SiteSettings/config'
+import { FormSettings } from './FormSettings/config'
 import { plugins } from './plugins'
 import { seedMainEndpoint } from './endpoints/seed-main'
 import { seedFromSitemapEndpoint } from './endpoints/seed-from-sitemap'
@@ -83,7 +84,7 @@ export default buildConfig({
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),
   endpoints: [seedMainEndpoint, seedFromSitemapEndpoint],
-  globals: [SiteSettings, HeaderNavigation, MainNavigation, FooterNavigation],
+  globals: [SiteSettings, HeaderNavigation, MainNavigation, FooterNavigation, FormSettings],
   plugins,
   secret: process.env.PAYLOAD_SECRET,
   sharp,

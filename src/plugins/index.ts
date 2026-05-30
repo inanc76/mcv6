@@ -80,10 +80,23 @@ export const plugins: Plugin[] = [
           redirect: { tr: 'Yönlendirme', en: 'Redirect' },
           emails: { tr: 'E-postalar', en: 'Emails' },
         }
+        // Fields whose content is per-locale (TR/EN ayrı yazılır).
+        // title: kullanıcı admin'de iki locale için ayrı başlık tutar.
+        // submitButtonLabel + confirmationMessage: dil-bağımlı kullanıcı metni.
+        // emails: subject + message dil-bağımlı (Cloudflare locale routing).
+        const LOCALIZED_FIELDS = new Set([
+          'title',
+          'submitButtonLabel',
+          'confirmationMessage',
+          'emails',
+        ])
         return defaultFields.map((field) => {
           let next: any = field
           if ('name' in field && field.name && FORM_FIELD_LABELS[field.name]) {
             next = { ...next, label: FORM_FIELD_LABELS[field.name] }
+          }
+          if ('name' in field && field.name && LOCALIZED_FIELDS.has(field.name)) {
+            next = { ...next, localized: true }
           }
           if ('name' in field && field.name === 'confirmationMessage') {
             next = {
