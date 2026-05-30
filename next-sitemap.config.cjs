@@ -6,15 +6,7 @@ const SITE_URL =
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
   siteUrl: SITE_URL,
-  generateRobotsTxt: true,
+  // robots.txt is served dynamically from Payload SiteSettings → see src/app/(frontend)/robots.txt/route.ts
+  generateRobotsTxt: false,
   exclude: ['/posts-sitemap.xml', '/pages-sitemap.xml', '/*', '/posts/*'],
-  robotsTxtOptions: {
-    policies: [
-      {
-        userAgent: '*',
-        disallow: '/admin/*',
-      },
-    ],
-    additionalSitemaps: [`${SITE_URL}/pages-sitemap.xml`, `${SITE_URL}/posts-sitemap.xml`],
-  },
 }

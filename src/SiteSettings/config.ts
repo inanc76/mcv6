@@ -108,6 +108,42 @@ export const SiteSettings: GlobalConfig = {
         },
       ],
     },
+    // ─── ROBOTS ──────────────────────────────────────────────────────────
+    {
+      name: 'robots',
+      label: { en: 'Robots', tr: 'Robots' },
+      type: 'group',
+      admin: {
+        description: {
+          en: 'Content served at /robots.txt. Changes go live immediately on save.',
+          tr: '/robots.txt adresinde yayınlanır. Kaydettiğinizde anında aktif olur.',
+        },
+      },
+      fields: [
+        {
+          name: 'robotsTxt',
+          label: { en: 'robots.txt content', tr: 'robots.txt içeriği' },
+          type: 'textarea',
+          admin: {
+            rows: 14,
+            description: {
+              en: 'Leave empty to use a sensible default generated from your domain. Edit freely to customize.',
+              tr: 'Boş bırakırsanız domain’inizden otomatik varsayılan üretilir. İstediğiniz gibi düzenleyebilirsiniz.',
+            },
+          },
+          defaultValue: [
+            'User-agent: *',
+            'Disallow: /admin/',
+            'Disallow: /api/',
+            'Disallow: /*.doc$',
+            'Disallow: /*.docx$',
+            'Allow: /',
+            '',
+            'Sitemap: https://example.com/sitemap.xml',
+          ].join('\n'),
+        },
+      ],
+    },
   ],
   hooks: {
     afterChange: [revalidateSiteSettings],
