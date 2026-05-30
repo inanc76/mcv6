@@ -9,6 +9,7 @@ import { GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types'
 import { FixedToolbarFeature, HeadingFeature, lexicalEditor } from '@payloadcms/richtext-lexical'
 import { searchFields } from '@/search/fieldOverrides'
 import { beforeSyncWithSearch } from '@/search/beforeSync'
+import { spamGuardBeforeOperation } from '@/utilities/formSpamGuard'
 
 import { Page, Post } from '@/payload-types'
 import { getServerSideURL } from '@/utilities/getURL'
@@ -108,6 +109,13 @@ export const plugins: Plugin[] = [
         plural: { tr: 'Form Yanıtları', en: 'Form Submissions' },
       },
       admin: { group: { tr: 'Formlar', en: 'Forms' } },
+      // Spam guard: honeypot (her zaman aktif) + Cloudflare Turnstile
+      // (CLOUDFLARE_TURNSTILE_SECRET_KEY env'inde set ise). Reject olan
+      // submission'lar DB'ye yazılmaz; geçerli olanlardan internal
+      // (_honeypot, _turnstileToken) field'lar strip edilir.
+      hooks: {
+        beforeOperation: [spamGuardBeforeOperation as any],
+      },
     },
   }),
   searchPlugin({

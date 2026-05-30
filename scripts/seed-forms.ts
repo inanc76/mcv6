@@ -4,32 +4,45 @@
  *   pnpm exec tsx scripts/seed-forms.ts
  *
  * Idempotent: re-running updates existing forms' emails + submitButtonLabel +
- * confirmationMessage (matched by title). Fields are NOT overwritten on
- * re-run (so user's admin-side field edits survive).
+ * confirmationMessage + honeypot field (matched by title). User-added fields
+ * are preserved on re-run (only the honeypot field is auto-injected/synced).
  *
  * ## forms.yml schema
  *
  * ```yaml
- * # Global defaults (optional) — applied to every form unless overridden
- * defaultEmailTo: "developer@example.com"    # form gönderiminde bildirim
- * defaultEmailFrom: "noreply@example.com"    # gönderen adres
+ * # Global defaults (optional)
+ * defaultEmailTo: "developer@example.com"      # admin notification target
+ * defaultEmailFrom: "noreply@example.com"      # sender (else derived from SERVER_URL)
+ * submitterEmailField: "email"                 # form field name to auto-reply to
+ *
+ * # Auto-reply config (optional) — sent to submitter after submission
+ * autoReply:
+ *   enabled: true                              # default true if not set
+ *   subject: "Formunuz alındı"
+ *   message: "Teşekkürler! En kısa sürede size dönüş yapacağız."
+ *
+ * # Honeypot field auto-injected into every form (set false to disable)
+ * honeypot:
+ *   enabled: true                              # default true
+ *   fieldName: "_honeypot"                     # internal name; hidden in frontend
  *
  * forms:
  *   - title: "İş Başvuru Formu"
- *     emailTo: "hr@example.com"              # opsiyonel override
- *     submitLabel: "Gönder"                  # opsiyonel
- *     confirmationMessage: "Form alındı."    # plain text
- *     fields: []      # admin'den doldur veya inline:
- *     # fields:
- *     #   - { type: text,  name: adsoyad, label: "Ad Soyad",  required: true }
- *     #   - { type: email, name: email,   label: "E-posta",   required: true }
+ *     emailTo: "hr@example.com"                # optional override
+ *     submitLabel: "Gönder"
+ *     confirmationMessage: "Form alındı."
+ *     fields:                                  # admin'den doldur veya inline:
+ *       - { type: text,  name: adsoyad, label: "Ad Soyad", required: true }
+ *       - { type: email, name: email,   label: "E-posta",   required: true }
  * ```
  *
- * Email davranışı:
- * - `defaultEmailTo` set ise her form için bir email notification config'i yazılır
- * - `emailTo` form-spesifik override (örn. İK formu için ik@..., Şikayet için
- *   musteri@...)
- * - emailFrom yoksa noreply@<NEXT_PUBLIC_SERVER_URL'in domain'i> kullanılır
+ * Email body templating (Payload Form Builder):
+ * - `{{*}}` — submitter'ın doldurduğu TÜM field'lar, key: value formatında
+ * - `{{fieldName}}` — spesifik field değeri
+ * - `{{*:table}}` — HTML tablo formatında tüm field'lar
+ *
+ * Auto-reply emailTo'da `{{email}}` (veya `submitterEmailField` ne ise) kullanılır
+ * — form'da o isimde bir field yoksa email gönderilmez (Form Builder silently skip).
  */
 
 import 'dotenv/config'
@@ -57,6 +70,16 @@ type FormSpec = {
 type FormsDoc = {
   defaultEmailTo?: string
   defaultEmailFrom?: string
+  submitterEmailField?: string
+  autoReply?: {
+    enabled?: boolean
+    subject?: string
+    message?: string
+  }
+  honeypot?: {
+    enabled?: boolean
+    fieldName?: string
+  }
   forms: FormSpec[]
 }
 
@@ -72,6 +95,11 @@ if (!doc?.forms?.length) {
   console.error('✗ forms.yml has no forms')
   process.exit(1)
 }
+
+const SUBMITTER_FIELD = doc.submitterEmailField ?? 'email'
+const AUTO_REPLY_ENABLED = doc.autoReply?.enabled !== false
+const HONEYPOT_ENABLED = doc.honeypot?.enabled !== false
+const HONEYPOT_FIELD = doc.honeypot?.fieldName ?? '_honeypot'
 
 function richText(text: string) {
   return {
@@ -117,19 +145,60 @@ function deriveFromDomain(): string {
 }
 
 function buildEmails(form: FormSpec) {
+  const out: Array<Record<string, unknown>> = []
   const to = form.emailTo ?? doc.defaultEmailTo
-  if (!to) return [] // no email destination → skip notification config
   const from = form.emailFrom ?? doc.defaultEmailFrom ?? deriveFromDomain()
-  return [
-    {
+
+  // Admin notification — body contains ALL submitted fields via {{*}}
+  if (to) {
+    out.push({
       emailTo: to,
       emailFrom: from,
       subject: `Yeni form gönderimi: ${form.title}`,
       message: richText(
-        `"${form.title}" formuna yeni bir gönderim geldi. Detaylar için admin panelden Form Yanıtları bölümüne bakın.`,
+        `"${form.title}" formuna yeni bir gönderim geldi:\n\n{{*}}`,
       ),
-    },
-  ]
+    })
+  }
+
+  // Auto-reply — sent to submitter (requires form has a field named SUBMITTER_FIELD)
+  if (AUTO_REPLY_ENABLED) {
+    const subject = doc.autoReply?.subject ?? 'Formunuz alındı'
+    const message =
+      doc.autoReply?.message ??
+      `Merhaba,\n\n"${form.title}" formunuz tarafımıza ulaştı. En kısa sürede dönüş yapacağız.\n\nGönderdiğiniz bilgiler:\n{{*}}\n\nTeşekkürler.`
+    out.push({
+      emailTo: `{{${SUBMITTER_FIELD}}}`,
+      emailFrom: from,
+      subject,
+      message: richText(message),
+    })
+  }
+
+  return out
+}
+
+// Honeypot field — bot-only invisible input. Frontend MUST render it
+// hidden (display:none veya position:absolute;left:-9999px). Server-side
+// hook (src/plugins/index.ts → formSubmissionOverrides.hooks.beforeOperation)
+// dolu olarak gelirse submission'ı reject eder.
+function honeypotField(): FormField {
+  return {
+    type: 'text',
+    name: HONEYPOT_FIELD,
+    label: '(do not fill — spam trap)',
+    required: false,
+    admin: {
+      description: 'Honeypot — frontend bunu gizler. Bot doldurursa submission reddedilir.',
+    } as any,
+  }
+}
+
+function mergeFields(userFields: FormField[] | undefined): FormField[] {
+  const base = userFields ?? []
+  if (!HONEYPOT_ENABLED) return base
+  const hasHoneypot = base.some((f) => f.name === HONEYPOT_FIELD)
+  return hasHoneypot ? base : [...base, honeypotField()]
 }
 
 const payload = await getPayload({ config })
@@ -152,28 +221,36 @@ for (const form of doc.forms) {
       ),
       emails: buildEmails(form),
     } as any
+
     if (existing.docs[0]) {
+      // Re-run: update config + ensure honeypot in fields; preserve user-added fields.
+      const currentFields = (existing.docs[0].fields ?? []) as FormField[]
+      const withHoneypot = mergeFields(currentFields)
       await payload.update({
         collection: 'forms',
         id: existing.docs[0].id,
-        data: baseData, // fields KORUNUR (admin tarafında düzenleme süreklilik kazansın)
+        data: { ...baseData, fields: withHoneypot },
       })
       updated++
-      console.log(`  ↻ ${form.title} güncellendi (id=${existing.docs[0].id}, emails=${baseData.emails.length})`)
+      console.log(
+        `  ↻ ${form.title} güncellendi (id=${existing.docs[0].id}, emails=${baseData.emails.length}, honeypot=${HONEYPOT_ENABLED ? 'yes' : 'no'})`,
+      )
     } else {
       const c = await payload.create({
         collection: 'forms',
-        data: { title: form.title, fields: form.fields ?? [], ...baseData } as any,
+        data: { title: form.title, fields: mergeFields(form.fields), ...baseData } as any,
       })
       created++
       console.log(
-        `  ✓ ${form.title} oluşturuldu (id=${c.id}, fields=${(form.fields ?? []).length}, emails=${baseData.emails.length})`,
+        `  ✓ ${form.title} oluşturuldu (id=${c.id}, fields=${mergeFields(form.fields).length}, emails=${baseData.emails.length})`,
       )
     }
   } catch (err: any) {
-    console.log(`  ✗ ${form.title} HATA: ${err?.message?.slice(0, 160)}`)
+    console.log(`  ✗ ${form.title} HATA: ${err?.message?.slice(0, 200)}`)
   }
 }
 
-console.log(`\n✓ Forms seed tamamlandı — created=${created}, updated=${updated}`)
+console.log(
+  `\n✓ Forms seed tamamlandı — created=${created}, updated=${updated}, autoReply=${AUTO_REPLY_ENABLED}, honeypot=${HONEYPOT_ENABLED}`,
+)
 process.exit(0)

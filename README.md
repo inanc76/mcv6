@@ -586,27 +586,64 @@ footer: [...]                  # → footer-navigation (2 seviye)
 ### forms.yml schema
 
 ```yaml
-# Global defaults (opsiyonel) — her form için aksi belirtilmedikçe uygulanır
-defaultEmailTo: "developer@example.com"     # form gönderildiğinde bildirim alacak adres
-defaultEmailFrom: "noreply@example.com"     # gönderen adres (yoksa NEXT_PUBLIC_SERVER_URL host'undan türetilir)
+# Global defaults (opsiyonel)
+defaultEmailTo: "developer@example.com"      # admin notification adresi
+defaultEmailFrom: "noreply@example.com"      # gönderen (yoksa SERVER_URL host'undan)
+submitterEmailField: "email"                 # auto-reply için form field adı (default: 'email')
+
+# Auto-reply config (opsiyonel) — form'u dolduran kişiye onay maili
+autoReply:
+  enabled: true                              # default true; false ile kapatılır
+  subject: "Formunuz alındı"                 # opsiyonel; default = "Formunuz alındı"
+  message: |
+    Merhaba,
+    "{{*}}" bilgilerinizle başvurunuz alındı.
+    En kısa sürede dönüş yapacağız.
+
+# Honeypot field — her forma otomatik enjekte edilen invisible input
+honeypot:
+  enabled: true                              # default true
+  fieldName: "_honeypot"                     # frontend bunu display:none ile gizler
 
 forms:
   - title: "İş Başvuru Formu"
-    emailTo: "hr@example.com"                                # opsiyonel: bu forma özel adres
+    emailTo: "hr@example.com"                                # opsiyonel override
     submitLabel: "Gönder"                                    # opsiyonel
-    confirmationMessage: "Başvurunuz alındı, teşekkürler."   # plain text
-    fields: []                                               # admin'den doldur
-    # veya inline:
-    # fields:
-    #   - { type: text, name: adsoyad, label: "Ad Soyad", required: true }
-    #   - { type: email, name: email, label: "E-posta", required: true }
+    confirmationMessage: "Başvurunuz alındı, teşekkürler."
+    fields:                                                  # admin'den doldur veya inline:
+      - { type: text,  name: adsoyad, label: "Ad Soyad", required: true }
+      - { type: email, name: email,   label: "E-posta",   required: true }
 ```
 
-**Davranış:**
-- `defaultEmailTo` set ise her form için bir email notification config'i yazılır (Form Builder'ın `emails` array'i)
-- `emailTo` form-spesifik override; örn. İK formu `ik@...`, Şikayet formu `musteri@...`
-- `emailFrom` yoksa `noreply@<NEXT_PUBLIC_SERVER_URL'in domain'i>` kullanılır
-- İdempotent: title üzerinden eşleşir; re-run config'i (submitLabel, confirmationMessage, emails) günceller ama `fields`'i KORUR (admin'de yapılan field edit'leri silmez)
+**Email davranışı:**
+- `defaultEmailTo` set ise her form için **admin notification** email config'i yazılır. Subject: `Yeni form gönderimi: <form title>`. Body: `{{*}}` template — submitter'ın doldurduğu TÜM field'ları admin görür.
+- `autoReply.enabled` default `true`: ikinci email config'i submitter'a gider, `emailTo: {{email}}` (veya `submitterEmailField` ne ise). Form'da o field yoksa Form Builder silently skip eder.
+- `emailTo` form-spesifik admin adresi override eder (ik@, sikayet@, vs.).
+- İdempotent: title üzerinden eşleşir; re-run config + emails + honeypot field'ı güncellenir ama user-added fields KORUNUR.
+
+**Spam koruması (otomatik):**
+- **Honeypot**: seed-forms her forma `_honeypot` text field'ı enjekte eder. Frontend'te `display:none` ile gizlenir; bot doldurursa `formSubmissionOverrides.hooks.beforeOperation` reject eder.
+- **Cloudflare Turnstile**: `CLOUDFLARE_TURNSTILE_SECRET_KEY` env'inde set ise server-side token doğrulanır. Frontend `NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY` ile widget render eder; token submission'a `_turnstileToken` field adıyla eklenir. Secret yoksa dev modunda Turnstile bypass (sadece honeypot çalışır).
+- Geçerli submission'da internal field'lar (`_honeypot`, `_turnstileToken`) DB'ye yazılmadan strip edilir — admin Form Yanıtları'nda görünmez.
+
+**Email body template syntax (Payload Form Builder):**
+- `{{*}}` — tüm doldurulan field'lar, `Ad Soyad: John\nE-posta: john@...` formatında
+- `{{*:table}}` — HTML tablo formatında
+- `{{fieldName}}` — spesifik field değeri
+- Admin notification body default `{{*}}` template kullanır; auto-reply body de `{{*}}` ile gönderim kopyası içerir.
+
+**Frontend integration:**
+- Honeypot input'unu render et — CSS ile gizle:
+  ```html
+  <input type="text" name="_honeypot" tabindex="-1" autocomplete="off"
+         style="position:absolute;left:-9999px;opacity:0" aria-hidden="true" />
+  ```
+- Turnstile widget'ı render et (Cloudflare snippet veya `@marsidev/react-turnstile`):
+  ```tsx
+  <Turnstile siteKey={process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY!}
+             onSuccess={(token) => setTurnstileToken(token)} />
+  ```
+  Submit ederken `submissionData`'ya `{ field: '_turnstileToken', value: turnstileToken }` ekle.
 
 > 💡 `/proje-kur` skill'i `defaultEmailTo`'yu spec'teki `project.authorEmail`'den otomatik doldurur — developer formları kendisine yönlendirir, müşteri sonradan admin'den değiştirir.
 
