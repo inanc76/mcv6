@@ -112,23 +112,6 @@ const SiteModeWidget: React.FC = () => {
           <button
             type="button"
             role="radio"
-            aria-checked={isDev}
-            onClick={() => setDraftMode('development')}
-            disabled={pending || draftMode == null}
-            style={{
-              ...halfStyle,
-              background: 'transparent',
-              color: isDev ? DEV_COLOR : 'var(--theme-elevation-500)',
-              borderColor: isDev ? DEV_COLOR : 'transparent',
-              fontWeight: isDev ? 700 : 500,
-              cursor: pending ? 'wait' : 'pointer',
-            }}
-          >
-            {t.development}
-          </button>
-          <button
-            type="button"
-            role="radio"
             aria-checked={isLive}
             onClick={() => setDraftMode('live')}
             disabled={pending || draftMode == null}
@@ -142,6 +125,23 @@ const SiteModeWidget: React.FC = () => {
             }}
           >
             {t.live}
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isDev}
+            onClick={() => setDraftMode('development')}
+            disabled={pending || draftMode == null}
+            style={{
+              ...halfStyle,
+              background: 'transparent',
+              color: isDev ? DEV_COLOR : 'var(--theme-elevation-500)',
+              borderColor: isDev ? DEV_COLOR : 'transparent',
+              fontWeight: isDev ? 700 : 500,
+              cursor: pending ? 'wait' : 'pointer',
+            }}
+          >
+            {t.development}
           </button>
         </div>
 
